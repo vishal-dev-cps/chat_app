@@ -2,20 +2,33 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import { useState, useEffect } from 'react';
 import UserList from './components/UserList';
+import SidebarHeader from './components/SidebarHeader';
+import { loadUsers } from './services/userService';
 import ChatWindow from './components/ChatWindow';
 import MessageInput from './components/MessageInput';
+import LoginModal from './components/LoginModal';
 import './App.css';
 
 export default function App() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const currentUserParam = urlParams.get('user');
-  const currentUserId = currentUserParam ? Number(currentUserParam) : 1; // default user id 1
-  const [users] = useState([
-    { id: 1, name: 'Alice' },
-    { id: 2, name: 'Bob' }
-  ]);
+    const urlParams = new URLSearchParams(window.location.search);
+  const paramId = urlParams.get('securityId') || urlParams.get('user');
+  const [currentUserId, setCurrentUserId] = useState(paramId || null);
+  const showLogin = !currentUserId;
+  const [users, setUsers] = useState([]);
+  const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [messages, setMessages] = useState([]);
+
+  // load users on mount
+  useEffect(() => {
+    (async () => {
+      if (!currentUserId) return;
+      const currentUser = { id: currentUserId, role: 'admin' }; // TODO: real role
+      const fetched = await loadUsers(currentUser);
+      setUsers(fetched);
+      if (fetched.length > 0) setSelectedUser(fetched[0]);
+    })();
+  }, [currentUserId]);
 
   // Listen for messages via localStorage events (cross-tab demo)
   useEffect(() => {
@@ -43,16 +56,21 @@ export default function App() {
   };
 
   return (
-    <div className="container-fluid py-3">
-      <div className="row">
-        <div className="col-4">
-          <UserList users={users} selected={selectedUser} onSelect={setSelectedUser} />
+    <>
+      <LoginModal show={showLogin} onSubmit={(id)=>{
+        setCurrentUserId(id);
+        window.history.replaceState({}, '', `?securityId=${id}`);
+      }}/>
+      <div className="app-wrapper">
+        <div className="sidebar">
+          <SidebarHeader onSearch={setSearch} currentUser={users.find(u=>u.id===currentUserId)} />
+          <UserList users={users.filter(u=>u.displayName.toLowerCase().includes(search.toLowerCase()))} selected={selectedUser} onSelect={setSelectedUser} />
         </div>
-        <div className="col-8 d-flex flex-column" style={{ height: '80vh' }}>
+        <div className="chat-area d-flex flex-column">
           <ChatWindow messages={messages} selectedUser={selectedUser} currentUserId={currentUserId} />
           <MessageInput disabled={!selectedUser} onSend={sendMessage} />
         </div>
       </div>
-    </div>
+    </>
   );
 }
