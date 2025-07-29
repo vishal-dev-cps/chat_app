@@ -6,6 +6,34 @@
   height: 30%;
 }
 
+/* Layout tweaks for chat area */
+.app-wrapper {
+  display: flex;
+  height: 100vh; /* full viewport height to keep internal scrolling */
+  overflow: hidden;
+}
+
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden; /* so only internal container scrolls */
+}
+
+.sidebar {
+  width: 350px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.sidebar .user-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
 .logo {
   height: 6em;
   padding: 1.5em;

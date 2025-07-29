@@ -1,0 +1,74 @@
+/* Message Input Container */
+.message-input-bar {
+  display: flex;
+  align-items: center;
+  background-color: #f0f2f5;
+  padding: 10px 16px;
+  border-top: 1px solid #e9edef;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+/* Input Field */
+.message-input-bar .form-control {
+  flex: 1;
+  min-width: 50px; /* Ensures input doesn't collapse */
+  background-color: #fff !important;
+  border-radius: 8px;
+  padding: 9px 12px;
+  border: none;
+  box-shadow: none;
+  color: #111b21;
+  margin: 0;
+}
+
+/* Icon Buttons */
+.message-input-bar .icon-btn {
+  color: #54656f;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 8px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.message-input-bar .icon-btn:hover:not(:disabled) {
+  opacity: 1;
+}
+
+.message-input-bar .icon-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Send Button */
+.message-input-bar .send {
+  color: #54656f;
+}
+
+.message-input-bar .send:not(:disabled) {
+  color: #00a884;
+}
+
+/* Dark Mode Styles */
+@media (prefers-color-scheme: dark) {
+  .message-input-bar {
+    background-color: #1f2c34;
+    border-top-color: #2a3942;
+  }
+  
+  .message-input-bar .form-control {
+    background-color: #2a3942 !important;
+    color: #e9edef;
+  }
+  
+  .message-input-bar .icon-btn {
+    color: #aebac1;
+  }
+  
+  .message-input-bar .form-control::placeholder {
+    color: #8696a0;
+  }
+}

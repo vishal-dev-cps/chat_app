@@ -1,0 +1,54 @@
+.message-status-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--message-status-color, #8696a0);
+}
+
+.message-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.message-status.sent {
+  color: var(--message-status-color, #8696a0);
+}
+
+.message-status.delivered {
+  color: var(--message-status-color, #8696a0);
+}
+
+.message-status.read {
+  color: #53bdeb;
+}
+
+.message-time {
+  font-size: 11px;
+  color: var(--message-time-color, #8696a0);
+  white-space: nowrap;
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .message-status-container {
+    --message-status-color: #aebac1;
+    --message-time-color: #aebac1;
+  }
+}
+
+/* For sent messages */
+.sent .message-status-container {
+  --message-status-color: #8696a0;
+  --message-time-color: #8696a0;
+}
+
+/* For received messages */
+.received .message-status-container {
+  --message-status-color: #8696a0;
+  --message-time-color: #8696a0;
+}

@@ -12,6 +12,7 @@
   --button-bg: #00a884;
   --placeholder: #667781;
   --main-bg: #3075dd;
+  --border-color: #ddd;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -28,6 +29,7 @@
     --button-bg: #00a884;
     --placeholder: #8696a0;
     --main-bg: #092133;
+    --border-color: #202c33;
   }
 }
 
@@ -216,7 +218,7 @@ body {
 .message-input-bar {
   border-top: 1px solid rgba(255, 255, 255);
   padding: 10px;
-  background: var(--sidebar-hover);
+  background: var(--sidebar-bg);
 }
 
 .message-input {

@@ -100,10 +100,25 @@ export async function loadUsers(currentUser) {
   // exclude self
   users = users.filter((u) => (u.userId || u.id) !== (currentUser.userId || currentUser.id));
 
-  // sort online first then name
+  // Define role priority (higher number = higher priority)
+  const rolePriority = {
+    'superAdmin': 3,
+    'admin': 2,
+    'security': 1,
+    '': 0
+  };
+
+  // Sort by role (superAdmin > admin > security), then online status, then name
   users.sort((a, b) => {
+    // First sort by role priority (descending)
+    const roleDiff = (rolePriority[b.role] || 0) - (rolePriority[a.role] || 0);
+    if (roleDiff !== 0) return roleDiff;
+    
+    // If same role, sort by online status (online first)
     if (a.status === 'online' && b.status !== 'online') return -1;
     if (a.status !== 'online' && b.status === 'online') return 1;
+    
+    // If same status, sort by name
     return (a.displayName || '').localeCompare(b.displayName || '');
   });
 
