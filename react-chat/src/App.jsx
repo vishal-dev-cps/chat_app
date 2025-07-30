@@ -6,22 +6,65 @@ import SidebarHeader from './components/SidebarHeader';
 import { loadUsers } from './services/userService';
 import { fetchUserStatus, updateUserStatus } from './services/chatService';
 import { fetchChatHistory, saveChatToLocal, updateMessageInHistory } from './services/chatService';
+import { requestNotificationPermission, showChatNotification } from './services/notificationService';
+import { socket, connectSocket, disconnectSocket } from './services/socket';
 import ChatWindow from './components/ChatWindow';
 import MessageInput from './components/MessageInput';
 import LoginModal from './components/LoginModal';
 import './App.css';
 
 export default function App() {
-    const urlParams = new URLSearchParams(window.location.search);
+  const urlParams = new URLSearchParams(window.location.search);
   const paramId = urlParams.get('securityId') || urlParams.get('user');
   const [currentUserId, setCurrentUserId] = useState(paramId || null);
   const showLogin = !currentUserId;
+
+  // Primary state hooks (declared early to avoid TDZ issues)
   const [users, setUsers] = useState([]);
-  // track status map {userId: {isOnline, lastSeen}}
-  const [userStatuses, setUserStatuses] = useState({});
-  const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [userStatuses, setUserStatuses] = useState({});
+  const [search, setSearch] = useState('');
+  const [readStatus, setReadStatus] = useState({});
+  // Register for notifications once
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
+
+  // Connect socket when currentUserId becomes available
+  useEffect(() => {
+    if (currentUserId) {
+      connectSocket(currentUserId);
+
+      // Incoming chat message
+      const onChatMessage = (msg) => {
+        // Only process if recipient is this user
+        if (msg.to !== currentUserId) return;
+
+        const newMsg = { ...msg, status: 'delivered' };
+
+        if (selectedUser?.id === msg.from) {
+          newMsg.status = 'read';
+          setReadStatus(prev => ({ ...prev, [msg.from]: Date.now() }));
+        }
+        setMessages(prev => [...prev, newMsg]);
+
+        if (selectedUser?.id !== msg.from) {
+          showChatNotification(newMsg, users);
+        }
+      };
+
+      socket.on('chat_message', onChatMessage);
+
+      return () => {
+        socket.off('chat_message', onChatMessage);
+        disconnectSocket();
+      };
+    }
+  }, [currentUserId, selectedUser, users]);
+
+  
+  
 
   // load users on mount
   useEffect(() => {
@@ -38,8 +81,7 @@ export default function App() {
     }
   }, [currentUserId]);
 
-  // Track read status and chat history
-  const [readStatus, setReadStatus] = useState({});
+  
   
   // Load chat history when a user is selected
   useEffect(() => {
@@ -93,7 +135,7 @@ export default function App() {
       clearTimeout(inactivityTimer);
       inactivityTimer = setTimeout(() => {
         updateUserStatus({ userId: currentUserId, status: 'offline' }).catch(console.error);
-      }, 5 * 60 * 1000);
+      }, 1 * 60 * 1000);
     };
     // list of events indicating activity
     const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
@@ -141,8 +183,7 @@ export default function App() {
           
           // If chat is not active, show notification
           if (selectedUser?.id !== msg.from) {
-            // You can add a notification system here
-            console.log(`New message from ${msg.from}`);
+            showChatNotification({ ...msg, from: msg.from, text: msg.text, id: msg.id }, users);
           }
         }
       }
@@ -210,7 +251,10 @@ export default function App() {
       }
     }, 500);
     
-    // Broadcast to other tabs
+    // Emit over socket to backend so other browsers/clients can receive
+    socket.emit('chat_message', newMsg);
+
+    // Legacy broadcast for same-browser tabs
     localStorage.setItem('chat_message', JSON.stringify(newMsg));
   };
 
