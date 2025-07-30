@@ -35,6 +35,8 @@ export const requestNotificationPermission = async () => {
 
 // Show a notification
 export const showNotification = (title, options = {}) => {
+  console.log('showNotification called with:', { title, options });
+  
   // Default options
   const defaultOptions = {
     icon: '/favicon.ico',
@@ -43,45 +45,194 @@ export const showNotification = (title, options = {}) => {
     ...options
   };
 
-  // Check if notifications are supported and permission is granted
-  if (!('Notification' in window) || Notification.permission !== 'granted') {
-    console.warn('Notifications not enabled or not supported');
+  // Check if notifications are supported
+  if (!('Notification' in window)) {
+    console.warn('This browser does not support desktop notifications');
     return;
   }
 
-  // Use service worker if available, otherwise use regular notifications
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.ready.then(registration => {
-      registration.showNotification(title, defaultOptions);
-    }).catch(error => {
-      console.error('Error showing notification with service worker:', error);
-      // Fallback to regular notifications
-      new Notification(title, defaultOptions);
+  // Check if we have permission
+  if (Notification.permission === 'granted') {
+    // Use service worker if available
+    if ('serviceWorker' in navigator && 'showNotification' in ServiceWorkerRegistration.prototype) {
+      navigator.serviceWorker.ready.then(registration => {
+        console.log('Showing notification via service worker');
+        registration.showNotification(title, defaultOptions)
+          .catch(error => {
+            console.error('Error showing notification with service worker:', error);
+            // Fallback to regular notifications
+            showFallbackNotification(title, defaultOptions);
+          });
+      }).catch(error => {
+        console.error('Service worker registration error:', error);
+        showFallbackNotification(title, defaultOptions);
+      });
+    } else {
+      // Fallback for browsers that don't support service workers
+      console.log('Service worker not available, using fallback');
+      showFallbackNotification(title, defaultOptions);
+    }
+  } else if (Notification.permission !== 'denied') {
+    // We need to ask the user for permission
+    console.log('Requesting notification permission...');
+    Notification.requestPermission().then(permission => {
+      if (permission === 'granted') {
+        // Try showing the notification again
+        showNotification(title, options);
+      }
     });
   } else {
-    // Fallback for browsers that don't support service workers
-    new Notification(title, defaultOptions);
+    console.warn('Notifications are blocked by the user');
+  }
+};
+
+// Fallback notification method
+const showFallbackNotification = (title, options) => {
+  try {
+    console.log('Showing fallback notification');
+    const notification = new Notification(title, options);
+    
+    notification.onclick = (event) => {
+      event.preventDefault();
+      window.focus();
+      notification.close();
+    };
+    
+    return notification;
+  } catch (error) {
+    console.error('Error showing fallback notification:', error);
+  }
+};
+
+// Play notification sound
+const playNotificationSound = () => {
+  try {
+    // Try to use Web Audio API for better control
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.2);
+    
+    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.5);
+  } catch (e) {
+    console.warn('Could not play notification sound:', e);
+  }
+};
+
+// Check if window is focused
+const isWindowFocused = () => {
+  return document.hasFocus();
+};
+
+// Test notification function
+export const testNotification = () => {
+  console.log('Testing direct notification...');
+  
+  // Check if notifications are supported
+  if (!('Notification' in window)) {
+    alert('This browser does not support desktop notifications');
+    return;
+  }
+
+  // Check if notification permissions have already been granted
+  if (Notification.permission === 'granted') {
+    // If it's okay, create a notification
+    const notification = new Notification('Test Notification', {
+      body: 'This is a direct test notification',
+      icon: '/favicon.ico'
+    });
+    
+    notification.onclick = function(event) {
+      event.preventDefault();
+      window.focus();
+      this.close();
+    };
+    
+    console.log('Direct notification shown');
+  }
+  // Otherwise, ask the user for permission
+  else if (Notification.permission !== 'denied') {
+    Notification.requestPermission().then(function(permission) {
+      if (permission === 'granted') {
+        testNotification(); // Try again now that we have permission
+      }
+    });
   }
 };
 
 // Show a chat message notification
 export const showChatNotification = (message, users = []) => {
-  // Find the sender's info
-  const sender = users.find(u => u.id === message.from) || { name: 'Someone' };
-  const title = `New message from ${sender.name || 'Someone'}`;
-  
-  // Prepare notification options
-  const options = {
-    body: message.text.length > 50 
-      ? `${message.text.substring(0, 50)}...` 
-      : message.text,
-    icon: sender.photoURL || '/favicon.ico',
-    tag: `msg-${message.id}`, // Group similar notifications
-    data: {
-      url: window.location.href,
-      userId: message.from
-    }
-  };
+  console.log('showChatNotification called with:', { message, users });
+  if (!message) return;
 
-  showNotification(title, options);
+  const sender = users.find(u => u.id === message.from);
+  const senderName = sender ? sender.name : 'Unknown';
+  const notificationTitle = `New message from ${senderName}`;
+  
+  // Check if notifications are supported
+  if (!('Notification' in window)) {
+    console.log('This browser does not support desktop notifications');
+    return;
+  }
+
+  // Check if we have permission to show notifications
+  if (Notification.permission === 'granted') {
+    const notification = new Notification(notificationTitle, {
+      body: message.text.length > 50 ? message.text.substring(0, 50) + '...' : message.text,
+      icon: sender?.avatar || '/favicon.ico',
+      tag: `chat-${message.id || Date.now()}`,
+      requireInteraction: true,
+      renotify: true,
+      silent: false
+    });
+
+    // Handle notification click
+    notification.onclick = function(event) {
+      event.preventDefault();
+      window.focus();
+      this.close();
+    };
+
+    // Play notification sound and update tab title if window is not focused
+    if (!isWindowFocused()) {
+      playNotificationSound();
+      updateUnreadCount(1);
+    }
+    
+    console.log('Chat notification shown');
+  } 
+  // Otherwise, request permission
+  else if (Notification.permission !== 'denied') {
+    Notification.requestPermission().then(function(permission) {
+      if (permission === 'granted') {
+        showChatNotification(message, users); // Try again now that we have permission
+      }
+    });
+  }
+};
+
+// Update unread count in tab title
+const updateUnreadCount = (increment = 1) => {
+  const originalTitle = document.title.replace(/^\(\d+\)\s*/, '');
+  let newTitle = '';
+  
+  const match = document.title.match(/^\((\d+)\)\s*(.*)/);
+  if (match) {
+    const count = parseInt(match[1]) + increment;
+    newTitle = `(${count}) ${match[2] || originalTitle}`;
+  } else {
+    newTitle = `(1) ${originalTitle}`;
+  }
+  
+  document.title = newTitle;
 };

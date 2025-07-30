@@ -40,7 +40,28 @@ export const getChatFromLocal = (currentUserId, otherUserId) => {
     if (!chatData) return [];
     
     const parsedData = JSON.parse(chatData);
-    return Array.isArray(parsedData.messages) ? parsedData.messages : [];
+    
+    // Ensure we have a valid messages array
+    if (!Array.isArray(parsedData.messages)) {
+      console.warn('Invalid chat data format, initializing new chat');
+      return [];
+    }
+    
+    // Process messages to ensure they have all required fields
+    const processedMessages = parsedData.messages.map(msg => ({
+      id: msg.id || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      from: msg.from,
+      to: msg.to,
+      text: msg.text || msg.content || '',
+      timestamp: msg.timestamp || Date.now(),
+      status: msg.status || 'sent',
+      ...(msg.attachments && { attachments: msg.attachments }),
+      ...(msg.read !== undefined && { read: msg.read })
+    }));
+    
+    // Sort messages by timestamp to ensure correct order
+    return processedMessages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    
   } catch (error) {
     console.error('Error getting chat from localStorage:', error);
     return [];
@@ -86,8 +107,30 @@ export async function updateUserStatus({ userId, status }) {
   return json?.data;
 }
 
+// Delete chat history for a conversation
+export const deleteChatHistory = async (currentUserId, otherUserId) => {
+  if (!currentUserId || !otherUserId) return false;
+  try {
+    const res = await fetch(`${API_BASE}/api/chat/history`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+      body: JSON.stringify({ userId: currentUserId, otherUserId })
+    });
+    if (!res.ok) throw new Error('Failed to delete history');
+    return true;
+  } catch (err) {
+    console.error('Error deleting chat history:', err);
+    return false;
+  }
+};
+
 // Fetch chat history from server and sync with local storage
 export const fetchChatHistory = async (currentUserId, otherUserId) => {
+  // If chat was previously deleted, stop early
+  const sortedIds = [currentUserId, otherUserId].sort();
+  if (localStorage.getItem(`deleted_chat_${sortedIds[0]}_${sortedIds[1]}`)) {
+    return [];
+  }
   try {
     // 1. Get local messages first for instant display
     const localMessages = getChatFromLocal(currentUserId, otherUserId);
@@ -102,47 +145,72 @@ export const fetchChatHistory = async (currentUserId, otherUserId) => {
       });
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`Server returned ${response.status}`);
       }
       
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('Response is not JSON');
-      }
+      const serverData = await response.json();
+      const serverMessages = Array.isArray(serverData.messages) ? serverData.messages : [];
       
-      const result = await response.json();
-      
-      if (!result.success || !Array.isArray(result.messages)) {
-        console.warn('Invalid server response format, using local messages');
-        return localMessages;
-      }
-      
-      const serverMessages = result.messages.map(msg => ({
-        id: msg.id,
-        from: msg.from,
-        to: msg.from === currentUserId ? otherUserId : currentUserId,
-        text: msg.content || msg.text || '', // Map content to text for display
-        content: msg.content || msg.text || '', // Keep content for backward compatibility
-        timestamp: msg.timestamp,
-        status: msg.status || (msg.read ? 'read' : 'delivered'),
-        read: msg.read
-      }));
-      
-      // 3. Merge and deduplicate messages (favor server versions)
+      // 3. Create a map of all messages by ID for easy lookup
       const messageMap = new Map();
       
-      // Add local messages first
+      // Process local messages first
       localMessages.forEach(msg => {
-        if (msg.id) messageMap.set(msg.id, msg);
+        if (msg && msg.id) {
+          messageMap.set(msg.id, {
+            ...msg,
+            // Mark source as local
+            _source: 'local'
+          });
+        }
       });
       
-      // Add/overwrite with server messages
+      // Process server messages and merge with local
       serverMessages.forEach(msg => {
-        if (msg.id) messageMap.set(msg.id, msg);
+        if (msg && msg.id) {
+          const existingMsg = messageMap.get(msg.id);
+          
+          if (existingMsg) {
+            // Merge with existing message, preferring server data but keeping local status
+            messageMap.set(msg.id, {
+              ...existingMsg,
+              ...msg,
+              // Preserve local status if it's 'read' and server status is older
+              status: (existingMsg.status === 'read' && 
+                      msg.status !== 'read' && 
+                      existingMsg.timestamp > (msg.updatedAt || 0)) 
+                ? 'read' 
+                : (msg.status || existingMsg.status || 'sent'),
+              // Keep the latest timestamp
+              timestamp: Math.max(
+                existingMsg.timestamp || 0, 
+                msg.timestamp || 0,
+                new Date(msg.createdAt || 0).getTime() || 0
+              ),
+              // Mark as synced
+              _synced: true
+            });
+          } else {
+            // Add new message from server
+            messageMap.set(msg.id, {
+              ...msg,
+              _source: 'server',
+              _synced: true
+            });
+          }
+        }
       });
       
-      const mergedMessages = Array.from(messageMap.values())
-        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      // Convert map back to array and sort by timestamp
+      let mergedMessages = Array.from(messageMap.values())
+        .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      
+      // Filter out any invalid messages
+      mergedMessages = mergedMessages.filter(msg => 
+        msg && 
+        msg.id && 
+        (msg.text || msg.content || '').trim() !== ''
+      );
       
       // 4. Update local storage with merged data
       saveChatToLocal(currentUserId, otherUserId, mergedMessages);
@@ -151,12 +219,13 @@ export const fetchChatHistory = async (currentUserId, otherUserId) => {
       
     } catch (error) {
       console.warn('Error fetching from server, using local messages:', error.message);
-      return localMessages;
+      // Ensure we return valid messages even if server fetch fails
+      return localMessages.filter(msg => msg && msg.id && (msg.text || msg.content || '').trim() !== '');
     }
   } catch (error) {
-    console.error('Error fetching chat history:', error);
-    // Return local messages if server fetch fails
-    return getChatFromLocal(currentUserId, otherUserId);
+    console.error('Error in fetchChatHistory:', error);
+    // Return empty array if both local and server fetches fail
+    return [];
   }
 };
 
@@ -164,23 +233,76 @@ export const fetchChatHistory = async (currentUserId, otherUserId) => {
 export const updateMessageInHistory = (currentUserId, otherUserId, message) => {
   try {
     const chatKey = getChatKey(currentUserId, otherUserId);
-    const chatData = JSON.parse(localStorage.getItem(chatKey) || '{"messages":[]}');
+    const existingData = localStorage.getItem(chatKey);
+    let chatData = { messages: [] };
     
-    // Find and update message
-    const messageIndex = chatData.messages.findIndex(m => m.id === message.id || m.tempId === message.tempId);
+    // Parse existing data if it exists
+    if (existingData) {
+      try {
+        chatData = JSON.parse(existingData);
+        // Ensure messages is an array
+        if (!Array.isArray(chatData.messages)) {
+          chatData.messages = [];
+        }
+      } catch (e) {
+        console.warn('Corrupted chat data, resetting...');
+        chatData = { messages: [] };
+      }
+    }
     
-    if (messageIndex !== -1) {
-      // Update existing message
-      chatData.messages[messageIndex] = {
-        ...chatData.messages[messageIndex],
-        ...message,
-        // Preserve existing fields if not being updated
-        content: message.content || chatData.messages[messageIndex].content,
-        status: message.status || chatData.messages[messageIndex].status
-      };
+    // If message has an ID, check if it already exists
+    if (message.id) {
+      const existingIndex = chatData.messages.findIndex(m => m.id === message.id);
+      
+      if (existingIndex !== -1) {
+        // Update existing message while preserving any existing fields
+        chatData.messages[existingIndex] = {
+          ...chatData.messages[existingIndex],
+          ...message,
+          // Preserve timestamp if not being updated
+          timestamp: message.timestamp || chatData.messages[existingIndex].timestamp
+        };
+      } else {
+        // Add new message
+        chatData.messages.push({
+          id: message.id,
+          from: message.from,
+          to: message.to,
+          text: message.text || message.content || '',
+          timestamp: message.timestamp || Date.now(),
+          status: message.status || 'sent',
+          ...(message.attachments && { attachments: message.attachments })
+        });
+      }
+    } else if (message.tempId) {
+      // Handle temporary IDs (for messages being sent)
+      const tempIndex = chatData.messages.findIndex(m => m.tempId === message.tempId);
+      if (tempIndex !== -1) {
+        chatData.messages[tempIndex] = {
+          ...chatData.messages[tempIndex],
+          ...message,
+          // If we now have a real ID, remove the tempId
+          ...(message.id && { tempId: undefined })
+        };
+      } else {
+        chatData.messages.push(message);
+      }
     } else {
-      // Add new message
-      chatData.messages.push(message);
+      // Fallback: add as new message with generated ID
+      chatData.messages.push({
+        ...message,
+        id: message.id || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: message.timestamp || Date.now()
+      });
+    }
+    
+    // Sort messages by timestamp to maintain order
+    chatData.messages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    
+    // Limit the number of messages to prevent localStorage overflow
+    const MAX_MESSAGES = 1000; // Adjust based on your needs
+    if (chatData.messages.length > MAX_MESSAGES) {
+      chatData.messages = chatData.messages.slice(-MAX_MESSAGES);
     }
     
     // Update last updated timestamp

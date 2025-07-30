@@ -2,7 +2,27 @@ import { StrictMode } from 'react';
 
 // Register service worker for notifications (must be before first render)
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(err => console.error('SW registration failed:', err));
+  window.addEventListener('load', async () => {
+    try {
+      const registration = await navigator.serviceWorker.register('/sw.js');
+      console.log('ServiceWorker registration successful with scope: ', registration.scope);
+      
+      // Check if notifications are supported
+      if (!('Notification' in window)) {
+        console.log('This browser does not support notifications');
+      } else if (Notification.permission === 'granted') {
+        console.log('Notifications are already granted');
+      } else if (Notification.permission !== 'denied') {
+        // Request permission from user
+        const permission = await Notification.requestPermission();
+        console.log('Notification permission:', permission);
+      }
+    } catch (error) {
+      console.error('ServiceWorker registration failed: ', error);
+    }
+  });
+} else {
+  console.warn('Service workers are not supported in this browser');
 }
 
 import { createRoot } from 'react-dom/client';

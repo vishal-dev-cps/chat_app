@@ -6,7 +6,7 @@ import SidebarHeader from './components/SidebarHeader';
 import { loadUsers } from './services/userService';
 import { fetchUserStatus, updateUserStatus } from './services/chatService';
 import { fetchChatHistory, saveChatToLocal, updateMessageInHistory } from './services/chatService';
-import { requestNotificationPermission, showChatNotification } from './services/notificationService';
+import { requestNotificationPermission, showChatNotification, testNotification } from './services/notificationService';
 import { socket, connectSocket, disconnectSocket } from './services/socket';
 import ChatWindow from './components/ChatWindow';
 import MessageInput from './components/MessageInput';
@@ -26,10 +26,64 @@ export default function App() {
   const [userStatuses, setUserStatuses] = useState({});
   const [search, setSearch] = useState('');
   const [readStatus, setReadStatus] = useState({});
-  // Register for notifications once
+  // Register for notifications and handle window focus/blur events
   useEffect(() => {
+    // Request notification permission
     requestNotificationPermission();
-  }, []);
+    
+    // Track unread count
+    let unreadCount = 0;
+    const originalTitle = document.title;
+    
+    // Update tab title with unread count
+    const updateTabTitle = () => {
+      if (unreadCount > 0) {
+        document.title = `(${unreadCount}) ${originalTitle.replace(/^\(\d+\)\s*/, '')}`;
+      } else {
+        document.title = originalTitle.replace(/^\(\d+\)\s*/, '');
+      }
+    };
+    
+    // Handle window focus
+    const handleFocus = () => {
+      unreadCount = 0;
+      updateTabTitle();
+    };
+    
+    // Handle window blur (optional: could be used for presence updates)
+    const handleBlur = () => {
+      // Could be used to update user status to 'away' in the future
+    };
+    
+    // Listen for new message notifications
+    const handleNotification = (message) => {
+      // Only count messages not from the currently selected user
+      if (selectedUser?.id !== message.from) {
+        unreadCount++;
+        updateTabTitle();
+      }
+    };
+    
+    // Add event listeners
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
+    
+    // Listen for custom notification events if needed
+    const notificationHandler = (e) => {
+      if (e.detail && e.detail.type === 'new_message') {
+        handleNotification(e.detail.message);
+      }
+    };
+    window.addEventListener('custom-notification', notificationHandler);
+    
+    // Cleanup
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('custom-notification', notificationHandler);
+      document.title = originalTitle; // Restore original title
+    };
+  }, [selectedUser]);
 
   // Connect socket when currentUserId becomes available
   useEffect(() => {
@@ -37,19 +91,37 @@ export default function App() {
       connectSocket(currentUserId);
 
       // Incoming chat message
-      const onChatMessage = (msg) => {
+      const onChatMessage = async (msg) => {
         // Only process if recipient is this user
         if (msg.to !== currentUserId) return;
 
-        const newMsg = { ...msg, status: 'delivered' };
+        const newMsg = { 
+          ...msg, 
+          status: 'delivered',
+          // Ensure timestamp is a number
+          timestamp: msg.timestamp || Date.now()
+        };
 
+        // Save to chat history first
+        await updateMessageInHistory(currentUserId, msg.from, newMsg);
+
+        // Add to messages state
+        setMessages(prev => {
+          // Check if message already exists (prevents duplicates)
+          if (prev.some(m => m.id === newMsg.id)) {
+            return prev;
+          }
+          return [...prev, newMsg];
+        });
+
+        // Update read status if this is from the currently selected user
         if (selectedUser?.id === msg.from) {
           newMsg.status = 'read';
           setReadStatus(prev => ({ ...prev, [msg.from]: Date.now() }));
-        }
-        setMessages(prev => [...prev, newMsg]);
-
-        if (selectedUser?.id !== msg.from) {
+          // Update in history as read
+          await updateMessageInHistory(currentUserId, msg.from, { ...newMsg, status: 'read' });
+        } else {
+          // Only show notification if not from the currently selected user
           showChatNotification(newMsg, users);
         }
       };
@@ -96,13 +168,49 @@ export default function App() {
             status: msg.from === selectedUser.id && msg.to === currentUserId ? 'read' : msg.status
           }));
           
+          // Sort messages by timestamp
+          updatedMessages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+          
+          // Update messages state
           setMessages(updatedMessages);
           
-          // Update read status
-          setReadStatus(prev => ({
-            ...prev,
-            [selectedUser.id]: Date.now()
-          }));
+          // Update read status for the current chat
+          if (selectedUser) {
+            setReadStatus(prev => ({
+              ...prev,
+              [selectedUser.id]: Date.now()
+            }));
+            
+            // Mark messages as read in history
+            const unreadMessages = updatedMessages.filter(
+              msg => msg.from === selectedUser.id && 
+                     msg.to === currentUserId && 
+                     msg.status !== 'read'
+            );
+            
+            if (unreadMessages.length > 0) {
+              const readUpdates = unreadMessages.map(msg => ({
+                ...msg,
+                status: 'read'
+              }));
+              
+              // Update all unread messages as read in history
+              await Promise.all(
+                readUpdates.map(msg => 
+                  updateMessageInHistory(currentUserId, selectedUser.id, msg)
+                )
+              );
+              
+              // Update local state
+              setMessages(prev => 
+                prev.map(msg => 
+                  msg.from === selectedUser.id && msg.to === currentUserId && msg.status !== 'read'
+                    ? { ...msg, status: 'read' }
+                    : msg
+                )
+              );
+            }
+          }
           
         } catch (error) {
           console.error('Error loading chat history:', error);
@@ -212,17 +320,21 @@ export default function App() {
     );
   };
 
-  const sendMessage = async (text) => {
-    if (!text || !selectedUser || !currentUserId) return;
+  const sendMessage = async (payload) => {
+    const text = typeof payload === 'string' ? payload : payload?.text || '';
+    const attachments = typeof payload === 'object' && payload?.attachments ? payload.attachments : [];
+    if (!text.trim() && attachments.length === 0) return;
+    if (!selectedUser || !currentUserId) return;
     
     const messageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const timestamp = Date.now();
     
-    const newMsg = { 
+    const newMsg = {
       id: messageId,
       from: currentUserId, 
       to: selectedUser.id, 
       text, 
+      attachments,
       timestamp,
       status: 'sending' // initial status
     };
@@ -264,6 +376,23 @@ export default function App() {
         setCurrentUserId(id);
         window.history.replaceState({}, '', `?securityId=${id}`);
       }}/>
+        {/* <button 
+          onClick={testNotification}
+          style={{
+            position: 'fixed',
+            bottom: '20px',
+            right: '20px',
+            zIndex: 1000,
+            padding: '10px 20px',
+            backgroundColor: '#007bff',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer'
+          }}
+        >
+          Test Notification
+        </button> */}
       <div className="app-wrapper">
         <div className="sidebar">
           <SidebarHeader onSearch={setSearch} currentUser={users.find(u=>u.id===currentUserId)} />

@@ -3,9 +3,50 @@ import { fetchUserStatus } from '../services/chatService';
 import './ChatWindow.css';
 import MessageStatus from './MessageStatus';
 import MessageInput from './MessageInput';
+import { getChatFromLocal, deleteChatHistory } from '../services/chatService';
+import { backupMessages } from '../services/backupService';
 
 export default function ChatWindow({ messages, selectedUser, currentUserId, onSend }) {
+  const handleBackup = async () => {
+    try {
+      const msgs = getChatFromLocal(currentUserId, selectedUser.id) || [];
+      const apiMsgs = msgs.map(m => ({
+        senderId: m.from,
+        recipientId: m.to,
+        message: m.text,
+        tempId: m.id,
+        ...(m.attachments && { attachments: m.attachments })
+      }));
+      if (apiMsgs.length === 0) {
+        alert('No messages to backup');
+        return;
+      }
+      await backupMessages(apiMsgs);
+      alert('Backup successful');
+    } catch (e) {
+      console.error(e);
+      alert('Backup failed');
+    }
+  };
   const messagesEndRef = useRef(null);
+
+  // Delete chat history for the current conversation
+  const handleDeleteChat = async () => {
+    if (!selectedUser) return;
+    const sortedIds = [currentUserId, selectedUser.id].sort();
+    const chatKey = `chat_${sortedIds[0]}_${sortedIds[1]}`;
+    if (window.confirm('Delete this chat history? This action cannot be undone.')) {
+      // 1. Remove local copy
+      localStorage.removeItem(chatKey);
+      // Mark as deleted to prevent refetch
+      localStorage.setItem(`deleted_chat_${sortedIds[0]}_${sortedIds[1]}`, '1');
+      // 2. Delete from server
+      await deleteChatHistory(currentUserId, selectedUser.id);
+      alert('Chat deleted');
+      // Reload to reflect changes quickly; in a larger app you'd refresh state via parent callback
+      window.location.reload();
+    }
+  };
   const messagesContainerRef = useRef(null);
 
   // Scroll to bottom when messages change
@@ -60,10 +101,10 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
   // Filter and sort messages for the selected user
   const filteredMessages = useMemo(() => {
     if (!selectedUser || !Array.isArray(messages)) return [];
-    
+
     return messages
-      .filter(msg => 
-        (msg.from === selectedUser?.id && msg.to === currentUserId) || 
+      .filter(msg =>
+        (msg.from === selectedUser?.id && msg.to === currentUserId) ||
         (msg.to === selectedUser?.id && msg.from === currentUserId)
       )
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
@@ -102,6 +143,26 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
           <span className="name">{selectedUser.displayName}</span>
           <span className={`status ${statusClass}`}>{statusText}</span>
         </div>
+
+        {/* Backup current chat */}
+        <button className="btn-backup" onClick={async () => {
+          try {
+            const msgs = getChatFromLocal(currentUserId, selectedUser.id) || [];
+            const apiMsgs = msgs.map(m => ({
+              senderId: m.from,
+              recipientId: m.to,
+              message: m.text,
+              tempId: m.id,
+              ...(m.attachments && { attachments: m.attachments })
+            }));
+            if (apiMsgs.length === 0) { alert('No messages to backup'); return; }
+            await backupMessages(apiMsgs);
+            alert('Backup successful');
+          } catch (e) { console.error(e); alert('Backup failed'); }
+        }}><i className="fas fa-cloud-upload-alt"></i></button>
+
+        {/* Delete current chat */}
+        <button className="btn-delete" onClick={handleDeleteChat}><i className="fas fa-trash"></i></button>
       </div>
       <div className="chat-messages-container" ref={messagesContainerRef}>
         <div className="chat-messages">
@@ -124,19 +185,28 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
                 <div key={i} className={`mb-2 ${isSent ? 'text-end' : 'text-start'}`}>
                   <div className={`msg-bubble-container ${isSent ? 'sent' : 'received'}`}>
                     <span className="msg-bubble">
-                      {m.text}
-                      {isSent ? (
-                        <MessageStatus 
-                          status={m.status} 
-                          timestamp={m.timestamp}
-                        />
-                      ) : (
-                        <div className="message-status-container">
-                          <span className="message-time">
-                            {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
+                      {/* Attachments */}
+                      {m.attachments && m.attachments.length > 0 && (
+                        <div className="msg-attachments">
+                          {m.attachments.map(att => (
+                            att.type?.startsWith('image/') ? (
+                              <img key={att.url} src={att.url} alt={att.name} className="chat-img" />
+                            ) : (
+                              <a key={att.url} href={att.url} target="_blank" rel="noreferrer" className="file-link">
+                                {att.name}
+                              </a>
+                            )
+                          ))}
                         </div>
                       )}
+                      {/* Message text */}
+                      {m.text && (
+                        <span className="msg-text">{m.text}</span>
+                      )}
+                      {/* Timestamp */}
+                      <span className="message-time">
+                        {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
                     </span>
                   </div>
                 </div>
