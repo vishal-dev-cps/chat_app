@@ -110,7 +110,7 @@ export default function UserList({ users, selected, onSelect, messages = [] }) {
                   <div className="last-message-preview">
                     {lastMessage && (
                       <span className={`message-sender ${isCurrentUser ? 'sent' : ''}`}>
-                        {isCurrentUser ? 'You: ' : ''}
+                        {isCurrentUser ? '' : 'You: '}
                       </span>
                     )}
                     {formatMessagePreview(messagePreview)}

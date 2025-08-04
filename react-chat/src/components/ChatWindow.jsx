@@ -3,10 +3,12 @@ import { fetchUserStatus } from '../services/chatService';
 import './ChatWindow.css';
 import MessageStatus from './MessageStatus';
 import MessageInput from './MessageInput';
-import { getChatFromLocal, deleteChatHistory } from '../services/chatService';
+import { getChatFromLocal, deleteChatHistory, saveChatToLocal, fetchChatHistory, updateMessageInHistory, softDeleteMessage } from '../services/chatService';
 import { backupMessages } from '../services/backupService';
+import { format } from 'date-fns';
 
 export default function ChatWindow({ messages, selectedUser, currentUserId, onSend }) {
+  const [hoveredMessage, setHoveredMessage] = useState(null);
   const handleBackup = async () => {
     try {
       const msgs = getChatFromLocal(currentUserId, selectedUser.id) || [];
@@ -110,6 +112,22 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   }, [messages, selectedUser, currentUserId]);
 
+  // Function to handle message deletion
+  const handleDeleteMessage = async (message) => {
+    if (window.confirm('Are you sure you want to delete this message?')) {
+      try {
+        const success = await softDeleteMessage(currentUserId, selectedUser.id, message.id);
+        if (success) {
+          // Refresh messages after deletion
+          const updatedMessages = await fetchChatHistory(currentUserId, selectedUser.id);
+          setMessages(updatedMessages);
+        }
+      } catch (error) {
+        console.error('Error deleting message:', error);
+      }
+    }
+  };
+
   if (!selectedUser) return (
     <div className="chat-empty-state">
       <div className="empty-state-content">
@@ -145,7 +163,7 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
         </div>
 
         {/* Backup current chat */}
-        <button className="btn-backup" onClick={async () => {
+        {/* <button className="btn-backup" onClick={async () => {
           try {
             const msgs = getChatFromLocal(currentUserId, selectedUser.id) || [];
             const apiMsgs = msgs.map(m => ({
@@ -159,7 +177,7 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
             await backupMessages(apiMsgs);
             alert('Backup successful');
           } catch (e) { console.error(e); alert('Backup failed'); }
-        }}><i className="fas fa-cloud-upload-alt"></i></button>
+        }}><i className="fas fa-cloud-upload-alt"></i></button> */}
 
         {/* Delete current chat */}
         <button className="btn-delete" onClick={handleDeleteChat}><i className="fas fa-trash"></i></button>
@@ -182,9 +200,28 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
             filteredMessages.map((m, i) => {
               const isSent = m.from === currentUserId;
               return (
-                <div key={i} className={`mb-2 ${isSent ? 'text-end' : 'text-start'}`}>
-                  <div className={`msg-bubble-container ${isSent ? 'sent' : 'received'}`}>
-                    <span className="msg-bubble">
+                <div 
+                  key={i} 
+                  className={`message-wrapper ${isSent ? 'sent' : 'received'}`}
+                  onMouseEnter={() => setHoveredMessage(m.id)}
+                  onMouseLeave={() => setHoveredMessage(null)}
+                >
+                  <div className={`message-content ${isSent ? 'sent' : 'received'}`}>
+                    <div className="message-actions">
+                      {isSent && hoveredMessage === m.id && (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteMessage(m);
+                          }}
+                          className="message-action-btn"
+                          title="Delete message"
+                        >
+                          <i className="fas fa-trash-alt"></i>
+                        </button>
+                      )}
+                    </div>
+                    <div className={`msg-bubble ${isSent ? 'sent' : 'received'}`}>
                       {/* Attachments */}
                       {m.attachments && m.attachments.length > 0 && (
                         <div className="msg-attachments">
@@ -203,11 +240,22 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
                       {m.text && (
                         <span className="msg-text">{m.text}</span>
                       )}
-                      {/* Timestamp */}
+                      {/* Timestamp and status */}
                       <span className="message-time">
                         {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {isSent && (
+                          <span className="message-status">
+                            {m.status === 'read' ? (
+                              <i className="fas fa-check-double text-primary"></i>
+                            ) : m.status === 'delivered' ? (
+                              <i className="fas fa-check-double"></i>
+                            ) : (
+                              <i className="fas fa-check"></i>
+                            )}
+                          </span>
+                        )}
                       </span>
-                    </span>
+                    </div>
                   </div>
                 </div>
               );

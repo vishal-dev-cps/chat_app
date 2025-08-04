@@ -1,4 +1,5 @@
 import apiClient from './api';
+import { filterRegularUsers } from './userFilters';
 
 /**
  * Fetch site personnel for the current security user.
@@ -54,6 +55,10 @@ async function fetchSitePersonnel(currentUser) {
  * Returns an array of user objects ready for UI.
  */
 export async function loadUsers(currentUser) {
+  const roleLower = (currentUser?.role || '').toLowerCase();
+  console.log('[userService] loadUsers for role:', roleLower);
+
+  console.log('[userService] currentUser', currentUser);
   // 1. chat users from API
   console.log('[userService] Loading chat users...');
   const chatUsersResp = await apiClient.get('/api/chat/users');
@@ -92,9 +97,58 @@ export async function loadUsers(currentUser) {
   let users = Array.from(mergedById.values());
   console.log('[userService] merged users', users);
 
-  // role filter for superAdmin
-  if (currentUser?.role === 'superAdmin') {
+  // ----- SECTION: SUPERADMIN -----
+  if (roleLower === 'superadmin') {
     users = users.filter((u) => ['admin', 'security', 'superAdmin'].includes(u.role));
+  }
+  // ----- SECTION: ADMIN -----
+  else if (roleLower === 'admins') { 
+    try {
+      // Fetch admin's sites
+      const adminSitesResponse = await apiClient.get(`/api/security/sites/admin/${currentUser.id}`);
+      const siteIds = adminSitesResponse.data?.sites?.map(site => site.id) || [];
+      console.log('[userService] Admin sites:', siteIds);
+      
+      // Fetch personnel for each site
+      const allPersonnel = [];
+      for (const siteId of siteIds) {
+        try {
+          const personnelResponse = await apiClient.get(`/api/security/sites/${siteId}/personnel`);
+          const sitePersonnel = personnelResponse.data?.personnel || [];
+          console.log(`[userService] Personnel for site ${siteId}:`, sitePersonnel);
+          allPersonnel.push(...sitePersonnel);
+        } catch (personnelError) {
+          console.error(`[userService] Error fetching personnel for site ${siteId}:`, personnelError);
+        }
+      }
+      
+      console.log('[userService] All personnel across sites:', allPersonnel);
+      
+      // Get unique personnel IDs from all sites
+      const personnelIds = [...new Set(allPersonnel.map(p => p.id))];
+      
+      // Filter users to include:
+      // 1. Superadmins
+      // 2. The current admin
+      // 3. Personnel from the admin's sites
+      users = users.filter(u => 
+        u.role === 'superAdmin' || 
+        u.id === currentUser.id || 
+        personnelIds.includes(u.id)
+      );
+      
+      console.log('[userService] Filtered users for admin:', users);
+    } catch (error) {
+      console.error('[userService] Error in admin section:', error);
+      // Fallback to original filter if API call fails
+      users = users.filter((u) => ['admin', 'security', 'superAdmin'].includes(u.role));
+    }
+  }
+  // ----- SECTION: REGULAR USER (ELSE) -----
+  else {
+    console.log('[userService] Regular user logged in - applying filters');
+    users = await filterRegularUsers(users, currentUser);
+    console.log('[userService] Combined users for regular user:', users);
   }
 
   // exclude self

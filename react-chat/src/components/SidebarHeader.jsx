@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react';
+import CreateGroupModal from './CreateGroupModal';
+import { createGroup as apiCreateGroup } from '../services/groupService';
 import api from '../services/api';
 
-export default function SidebarHeader({ onSearch, currentUser }) {
+export default function SidebarHeader({ users = [], onSearch, currentUser, currentUserId, onGroupCreated }) {
   const [query, setQuery] = useState('');
   const [userDetails, setUserDetails] = useState(null);
+  const [sitePersonnel, setSitePersonnel] = useState([]);
+  const [siteAdmin, setSiteAdmin] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   
   // Get securityId from URL
   const getSecurityIdFromUrl = () => {
@@ -42,6 +47,36 @@ export default function SidebarHeader({ onSearch, currentUser }) {
     fetchUserDetails();
   }, [currentUser]);
 
+  // When user details are available and role is not admin/superadmin, fetch site data
+  useEffect(() => {
+    const loadSiteInfo = async () => {
+      const roleRaw = (userDetails?.role || '').toLowerCase();
+      if (!userDetails || roleRaw === 'superadmin' || roleRaw === 'superadmins' || roleRaw === 'admin' || roleRaw === 'admins') {
+        return; // only run for non-admin users
+      }
+      const siteId = userDetails?.assignedSites?.[0]?.siteId;
+      console.log('[SidebarHeader] Derived siteId:', );
+      if (!siteId) return;
+      try {
+        // fetch site details to get admin
+        const siteRes = await api.get(`/api/security/sites/${siteId}`);
+        if (siteRes.data?.success) {
+          const adminObj = siteRes.data.site?.createdByAdmin;
+          setSiteAdmin(adminObj);
+        }
+        // fetch personnel of site
+        const personnelRes = await api.get(`/api/security/sites/${siteId}/personnel`);
+        console.log('[SidebarHeader] Personnel API response:', personnelRes.data);
+        if (personnelRes.data?.success) {
+          setSitePersonnel(personnelRes.data.personnel || []);
+        }
+      } catch (err) {
+        console.error('Error fetching site info/personnel:', err);
+      }
+    };
+    loadSiteInfo();
+  }, [userDetails]);
+
   const handleChange = (e) => {
     const val = e.target.value;
     setQuery(val);
@@ -71,8 +106,16 @@ export default function SidebarHeader({ onSearch, currentUser }) {
           <span className="title">{userDetails?.name || currentUser?.displayName || 'Me'}</span>
         </div>
         <div className="icons d-flex gap-3">
-          <i className="fas fa-pen"></i>
-          <i className="fas fa-ellipsis-v"></i>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary"
+            title="Create Group"
+            onClick={() => setShowCreateModal(true)}
+          >
+            <i className="fas fa-users"></i>
+          </button>
+          {/* <i className="fas fa-pen"></i>
+          <i className="fas fa-ellipsis-v"></i> */}
         </div>
       </div>
       <div className="sidebar-search">
@@ -87,6 +130,16 @@ export default function SidebarHeader({ onSearch, currentUser }) {
           />
         </div>
       </div>
+      <CreateGroupModal
+        currentUserId={currentUserId}
+        show={showCreateModal}
+        onHide={() => setShowCreateModal(false)}
+        users={users}
+        onCreate={async (payload) => {
+          await apiCreateGroup(payload);
+          onGroupCreated?.();
+        }}
+      />
     </>
   );
 }

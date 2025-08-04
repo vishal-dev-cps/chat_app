@@ -2,13 +2,17 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import { useState, useEffect, useMemo } from 'react';
 import UserList from './components/UserList';
+import GroupList from './components/GroupList';
+import { fetchGroups } from './services/groupService';
 import SidebarHeader from './components/SidebarHeader';
 import { loadUsers } from './services/userService';
+import api from './services/api';
 import { fetchUserStatus, updateUserStatus } from './services/chatService';
 import { fetchChatHistory, saveChatToLocal, updateMessageInHistory } from './services/chatService';
 import { requestNotificationPermission, showChatNotification, testNotification } from './services/notificationService';
 import { socket, connectSocket, disconnectSocket } from './services/socket';
 import ChatWindow from './components/ChatWindow';
+import GroupChatWindow from './components/GroupChatWindow';
 import MessageInput from './components/MessageInput';
 import LoginModal from './components/LoginModal';
 import './App.css';
@@ -23,8 +27,12 @@ export default function App() {
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [groupMessages, setGroupMessages] = useState([]);
   const [userStatuses, setUserStatuses] = useState({});
   const [search, setSearch] = useState('');
+  const [groups, setGroups] = useState([]);
+  const [sidebarTab, setSidebarTab] = useState('chats'); // 'chats' | 'groups'
   const [readStatus, setReadStatus] = useState({});
   // Register for notifications and handle window focus/blur events
   useEffect(() => {
@@ -86,10 +94,42 @@ export default function App() {
   }, [selectedUser]);
 
   // Connect socket when currentUserId becomes available
+  // Load groups initially and whenever a group is created
+  const refreshGroups = async () => {
+    try {
+      const g = await fetchGroups();
+      setGroups(g);
+    } catch (err) {
+      console.error('Error fetching groups:', err);
+    }
+  };
+
+  useEffect(() => {
+    refreshGroups();
+  }, []);
+
+  // Fetch groups when user switches to Groups tab
+  useEffect(() => {
+    if (sidebarTab === 'groups') {
+      refreshGroups();
+    }
+  }, [sidebarTab]);
+
+  // Fetch group messages when a group is selected
+  useEffect(() => {
+    const loadGroupMessages = async () => {
+      if (!selectedGroup) return;
+      const msgs = await (await import('./services/groupMessageService')).fetchGroupMessages(selectedGroup.id);
+      setGroupMessages(msgs);
+    };
+    loadGroupMessages();
+  }, [selectedGroup]);
+
   useEffect(() => {
     if (currentUserId) {
       connectSocket(currentUserId);
 
+      // ===== Socket listeners =====
       // Incoming chat message
       const onChatMessage = async (msg) => {
         // Only process if recipient is this user
@@ -142,15 +182,26 @@ export default function App() {
   useEffect(() => {
     (async () => {
       if (!currentUserId) return;
-      const currentUser = { id: currentUserId, role: 'admin' }; // TODO: real role
-      const fetched = await loadUsers(currentUser);
-      setUsers(fetched);
-      // Removed automatic selection of first user
+      
+      try {
+        // Fetch current user details from API
+        const response = await api.get(`/api/chat/user/${currentUserId}`);
+        if (response.data?.success) {
+          const currentUser = response.data.user;
+          console.log('[App] Current user:', currentUser);
+          const fetched = await loadUsers(currentUser);
+          setUsers(fetched);
+          // Removed automatic selection of first user
+          
+          // update my status to online
+          updateUserStatus({ userId: currentUserId, status: 'online' }).catch(console.error);
+        } else {
+          console.error('Failed to fetch user details:', response.data);
+        }
+      } catch (error) {
+        console.error('Error loading user data:', error);
+      }
     })();
-    // update my status to online
-    if (currentUserId) {
-      updateUserStatus({ userId: currentUserId, status: 'online' }).catch(console.error);
-    }
   }, [currentUserId]);
 
   
@@ -366,8 +417,27 @@ export default function App() {
     // Emit over socket to backend so other browsers/clients can receive
     socket.emit('chat_message', newMsg);
 
-    // Legacy broadcast for same-browser tabs
-    localStorage.setItem('chat_message', JSON.stringify(newMsg));
+    // Handle incoming group_message
+      const onGroupMessage = (msg) => {
+        if (msg.groupId !== selectedGroup?.id) return;
+        setGroupMessages((prev) => [...prev, msg]);
+      };
+      socket.on('group_message', onGroupMessage);
+
+  };
+
+  // ===== Group Chat Send =====
+  const sendGroupMessage = async (text, attachments = []) => {
+    if (!selectedGroup || !text.trim()) return;
+    const { sendGroupMessage } = await import('./services/groupMessageService');
+    const msg = await sendGroupMessage(selectedGroup.id, {
+      from: currentUserId,
+      text: text.trim(),
+      attachments,
+    });
+    // Optimistic update
+    setGroupMessages((prev) => [...prev, msg]);
+    socket.emit('group_message', { groupId: selectedGroup.id, ...msg });
   };
 
   return (
@@ -395,26 +465,58 @@ export default function App() {
         </button> */}
       <div className="app-wrapper">
         <div className="sidebar">
-          <SidebarHeader onSearch={setSearch} currentUser={users.find(u=>u.id===currentUserId)} />
-          <UserList 
-            users={users
-              .filter(u => u.displayName.toLowerCase().includes(search.toLowerCase()))
-              .map(user => ({
-                ...user,
-                unreadCount: unreadCounts[user.id] || 0
-              }))}
-            selected={selectedUser} 
-            onSelect={setSelectedUser} 
-            messages={messages}
+          <div className="sidebar-tabs d-flex">
+            <button className={`flex-fill btn btn-sm ${sidebarTab==='chats'?'btn-primary':'btn-outline-secondary'}`} onClick={()=>setSidebarTab('chats')}>Chats</button>
+            <button className={`flex-fill btn btn-sm ${sidebarTab==='groups'?'btn-primary':'btn-outline-secondary'}`} onClick={()=>setSidebarTab('groups')}>Groups</button>
+          </div>
+          <SidebarHeader
+            users={users}
+            onSearch={setSearch}
+            currentUser={users.find(u => u.id === currentUserId)}
+            currentUserId={currentUserId}
+            onGroupCreated={refreshGroups}
           />
+          {sidebarTab === 'chats' ? (
+            <UserList
+              users={users
+                .filter(u => u.displayName.toLowerCase().includes(search.toLowerCase()))
+                .map(u => ({ ...u, unreadCount: unreadCounts[u.id] || 0 }))}
+              selected={selectedUser}
+              onSelect={(user) => {
+                setSelectedUser(user);
+                setSelectedGroup(null);
+                // mark messages from this user as read
+                setMessages(prev => prev.map(m => (m.from === user.id && m.to === currentUserId ? { ...m, status: 'read' } : m)));
+              }}
+              messages={messages}
+            />
+          ) : (
+            <GroupList
+              groups={groups}
+              selected={selectedGroup}
+              onSelect={(g) => {
+                setSelectedGroup(g);
+                setSelectedUser(null);
+              }}
+            />
+          )}
         </div>
         <div className="chat-area d-flex flex-column">
-          <ChatWindow 
+          {selectedGroup ? (
+            <GroupChatWindow
+              currentUserId={currentUserId}
+              group={selectedGroup}
+              messages={groupMessages}
+              onSend={sendGroupMessage}
+            />
+          ) : (
+            <ChatWindow 
             messages={messages} 
             selectedUser={selectedUser} 
             currentUserId={currentUserId} 
             onSend={sendMessage}
           />
+          )}
         </div>
       </div>
     </>

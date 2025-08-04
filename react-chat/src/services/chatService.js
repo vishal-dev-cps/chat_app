@@ -1,3 +1,5 @@
+import apiClient from './api';
+
 // Generate a consistent chat key for localStorage
 const getChatKey = (userId1, userId2) => {
   const sortedIds = [userId1, userId2].sort();
@@ -229,12 +231,34 @@ export const fetchChatHistory = async (currentUserId, otherUserId) => {
   }
 };
 
-// Update a single message in chat history
-export const updateMessageInHistory = (currentUserId, otherUserId, message) => {
+// Helper function to send messages to backend
+const sendMessageToBackend = async (userId, otherUserId, message) => {
+  try {
+    await apiClient.post('/api/chat/messages', {
+      userId,
+      otherUserId,
+      messages: [{
+        id: message.id,
+        from: message.from,
+        content: message.text || message.content,
+        timestamp: message.timestamp,
+        read: message.status === 'read',
+        status: message.status || 'sent'
+      }]
+    });
+  } catch (error) {
+    console.error('Error sending message to backend:', error);
+    // Don't throw error to keep the UI working
+  }
+};
+
+// Update a single message in chat history and sync with backend
+export const updateMessageInHistory = async (currentUserId, otherUserId, message) => {
   try {
     const chatKey = getChatKey(currentUserId, otherUserId);
     const existingData = localStorage.getItem(chatKey);
     let chatData = { messages: [] };
+    let isNewMessage = false;
     
     // Parse existing data if it exists
     if (existingData) {
@@ -266,13 +290,14 @@ export const updateMessageInHistory = (currentUserId, otherUserId, message) => {
         // Add new message
         chatData.messages.push({
           id: message.id,
-          from: message.from,
-          to: message.to,
+          from: message.from || currentUserId,
+          to: message.to || otherUserId,
           text: message.text || message.content || '',
           timestamp: message.timestamp || Date.now(),
           status: message.status || 'sent',
           ...(message.attachments && { attachments: message.attachments })
         });
+        isNewMessage = true;
       }
     } else if (message.tempId) {
       // Handle temporary IDs (for messages being sent)
@@ -284,23 +309,29 @@ export const updateMessageInHistory = (currentUserId, otherUserId, message) => {
           // If we now have a real ID, remove the tempId
           ...(message.id && { tempId: undefined })
         };
+        isNewMessage = !!message.id; // Consider it new if we got a real ID
       } else {
         chatData.messages.push(message);
+        isNewMessage = true;
       }
     } else {
       // Fallback: add as new message with generated ID
-      chatData.messages.push({
+      const newMessage = {
         ...message,
         id: message.id || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        timestamp: message.timestamp || Date.now()
-      });
+        timestamp: message.timestamp || Date.now(),
+        from: message.from || currentUserId,
+        to: message.to || otherUserId
+      };
+      chatData.messages.push(newMessage);
+      isNewMessage = true;
     }
     
     // Sort messages by timestamp to maintain order
     chatData.messages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
     
     // Limit the number of messages to prevent localStorage overflow
-    const MAX_MESSAGES = 1000; // Adjust based on your needs
+    const MAX_MESSAGES = 1000;
     if (chatData.messages.length > MAX_MESSAGES) {
       chatData.messages = chatData.messages.slice(-MAX_MESSAGES);
     }
@@ -308,11 +339,77 @@ export const updateMessageInHistory = (currentUserId, otherUserId, message) => {
     // Update last updated timestamp
     chatData.lastUpdated = new Date().toISOString();
     
-    // Save back to localStorage
+    // Save to localStorage
     localStorage.setItem(chatKey, JSON.stringify(chatData));
+    
+    // Send to backend if it's a new message
+    const lastMessage = chatData.messages[chatData.messages.length - 1];
+    if (isNewMessage && lastMessage) {
+      await sendMessageToBackend(currentUserId, otherUserId, lastMessage);
+    }
+    
     return true;
   } catch (error) {
     console.error('Error updating message in history:', error);
+    return false;
+  }
+};
+
+/**
+ * Soft delete a message
+ * @param {string} currentUserId - ID of the current user
+ * @param {string} otherUserId - ID of the other user in the chat
+ * @param {string} messageId - ID of the message to delete
+ * @returns {Promise<boolean>} - True if successful
+ */
+export const softDeleteMessage = async (currentUserId, otherUserId, messageId) => {
+  try {
+    const chatKey = getChatKey(currentUserId, otherUserId);
+    const existingData = localStorage.getItem(chatKey);
+    
+    if (!existingData) return false;
+    
+    let chatData;
+    try {
+      chatData = JSON.parse(existingData);
+      if (!Array.isArray(chatData.messages)) {
+        chatData.messages = [];
+      }
+    } catch (e) {
+      console.warn('Corrupted chat data during delete:', e);
+      return false;
+    }
+
+    // Remove the message from local storage
+    const initialLength = chatData.messages.length;
+    chatData.messages = chatData.messages.filter(m => m.id !== messageId);
+    
+    if (chatData.messages.length === initialLength) {
+      console.warn('Message not found for deletion:', messageId);
+      return false;
+    }
+
+    // Update last updated timestamp
+    chatData.lastUpdated = new Date().toISOString();
+    
+    // Save back to localStorage
+    localStorage.setItem(chatKey, JSON.stringify(chatData));
+    
+    try {
+      // Call the API to soft delete the message
+      await apiClient.post('/api/chat/messages/soft-delete', {
+        messageIds: [messageId],
+        userId: currentUserId,
+        otherUserId: otherUserId
+      });
+    } catch (error) {
+      console.error('Error deleting message from server:', error);
+      // Continue even if server delete fails
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error in softDeleteMessage:', error);
     return false;
   }
 };
