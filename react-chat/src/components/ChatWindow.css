@@ -189,7 +189,7 @@
 }
 
 .message-wrapper:hover .msg-bubble.received {
-  background-color: #2a3942;
+  background-color: var(--bubble-recv-hover);
 }
 
 /* Empty Chat State (When no messages) */
@@ -210,6 +210,7 @@
   flex-direction: column;
   min-height: 0; /* This is important for flex children to respect overflow */
   scroll-behavior: smooth;
+  background-color: #1f2c34;
   -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
 }
 

@@ -428,13 +428,16 @@ export default function App() {
 
   // ===== Group Chat Send =====
   const sendGroupMessage = async (text, attachments = []) => {
-    if (!selectedGroup || !text.trim()) return;
-    const { sendGroupMessage } = await import('./services/groupMessageService');
-    const msg = await sendGroupMessage(selectedGroup.id, {
-      from: currentUserId,
-      text: text.trim(),
+    if (!selectedGroup) return;
+    if (!text.trim() && attachments.length === 0) return;
+    const { sendGroupMessage: sendGroupMsgApi } = await import('./services/groupMessageService');
+    const payload = {
+      senderId: currentUserId,
+      content: text.trim() || (attachments.length > 0 ? ' ' : ''),
       attachments,
-    });
+      timestamp: new Date().toISOString(),
+    };
+    const msg = await sendGroupMsgApi(selectedGroup.id, payload);
     // Optimistic update
     setGroupMessages((prev) => [...prev, msg]);
     socket.emit('group_message', { groupId: selectedGroup.id, ...msg });

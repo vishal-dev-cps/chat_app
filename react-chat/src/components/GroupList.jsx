@@ -22,7 +22,7 @@ export default function GroupList({ groups = [], selected, onSelect }) {
           </div>
           <div className="group-info">
             <div className="group-name">{g.name}</div>
-            <div className="group-meta small text-muted">
+            <div className="group-meta small members-preview">
               {Array.isArray(g.members) ? g.members.length : g.membersCount || 0} members
             </div>
           </div>

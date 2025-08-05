@@ -23,7 +23,8 @@
     --sidebar-active: #2a3942;
     --chat-bg: #222E35;
     --bubble-sent: #056162;
-    --bubble-recv: #262D31;
+    --bubble-recv: #2a3942;
+    --bubble-recv-hov: #262D31;
     --header-bg: #075E54;
     --input-bg: #2a3942;
     --button-bg: #00a884;
