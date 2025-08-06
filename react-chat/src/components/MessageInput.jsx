@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { createFilePreview, uploadFile, formatFileSize, getFileIconClass } from '../services/attachmentService';
 import EmojiPicker from 'emoji-picker-react';
 import './MessageInput.css';
+import { socket } from '../services/socket';
 
-export default function MessageInput({ disabled, onSend }) {
+export default function MessageInput({ disabled, onSend, groupId, currentUserId }) {
   const [text, setText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [attachments, setAttachments] = useState([]);
@@ -65,6 +67,14 @@ export default function MessageInput({ disabled, onSend }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // === Typing indicator via socket ===
+  useEffect(() => {
+    if (!groupId || !currentUserId) return;
+    if (!text.trim()) return;
+
+    socket.emit('typing', { groupId, userId: currentUserId });
+  }, [text, groupId, currentUserId]);
+
   return (
     <div className="message-input-bar">
       <div className="emoji-picker-container" ref={emojiPickerRef}>
@@ -121,7 +131,9 @@ export default function MessageInput({ disabled, onSend }) {
         className="form-control"
         value={text}
         disabled={disabled}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+        }}
         onKeyDown={(e) => e.key === 'Enter' && handleSend()}
         placeholder={disabled ? 'Select a user first' : 'Type a message'}
         aria-label="Type a message"
@@ -144,3 +156,10 @@ export default function MessageInput({ disabled, onSend }) {
     </div>
   );
 }
+
+MessageInput.propTypes = {
+  disabled: PropTypes.bool,
+  onSend: PropTypes.func,
+  groupId: PropTypes.any,
+  currentUserId: PropTypes.string,
+};

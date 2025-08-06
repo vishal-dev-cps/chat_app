@@ -89,6 +89,10 @@ export default function SidebarHeader({ users = [], onSearch, currentUser, curre
         <div className="d-flex align-items-center gap-2">
           {(() => {
             const name = userDetails?.name || currentUser?.displayName || 'Me';
+            // Persist my display name for other components (e.g. group chat) to retrieve
+            try {
+              localStorage.setItem('current_user_name', name);
+            } catch {/* ignore quota */}
             const initials = name.split(' ').slice(0,2).map(s=>s[0].toUpperCase()).join('');
             const avatar = userDetails?.photoURL || currentUser?.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
             return (

@@ -45,6 +45,34 @@ io.on('connection', (socket) => {
     }
   });
 
+  // === Group chat events ===
+  socket.on('join-group', ({ groupId, userId }) => {
+    socket.join(groupId);
+    console.log(`${userId} joined group ${groupId}`);
+  });
+
+  socket.on('group-message', (message) => {
+    const { groupId } = message || {};
+    if (groupId) {
+      io.to(groupId).emit('new-group-message', message);
+      // TODO: save message to DB here
+    }
+  });
+
+  socket.on('typing', ({ groupId, userId }) => {
+    socket.to(groupId).emit('user-typing', { groupId, userId });
+  });
+
+  socket.on('seen', ({ groupId, userId, messageId }) => {
+    socket.to(groupId).emit('message-seen', { groupId, userId, messageId });
+    // TODO: update message status in DB
+  });
+
+  socket.on('reaction', ({ messageId, groupId, reaction, userId }) => {
+    io.to(groupId).emit('message-reacted', { messageId, reaction, userId });
+    // TODO: persist reaction to DB
+  });
+
   socket.on('disconnect', () => {
     console.log('Socket disconnected:', userId || socket.id);
   });
