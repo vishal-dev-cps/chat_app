@@ -4,6 +4,71 @@ import MessageInput from './MessageInput';
 import './ChatWindow.css';
 import { socket, connectSocket } from '../services/socket';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+const USER_CACHE_KEY = 'chat_user_cache';
+
+// Function to get user from cache or fetch if not exists
+const getUserDetails = async (userId, currentUserId) => {
+  if (!userId) return null;
+  
+  // Check if user is the current user
+  if (userId === currentUserId) {
+    const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+    if (currentUser.id) return { ...currentUser, name: 'You' };
+  }
+  
+  // Check cache
+  const cache = JSON.parse(localStorage.getItem(USER_CACHE_KEY) || '{}');
+  if (cache[userId]) {
+    return cache[userId];
+  }
+  
+  // If not in cache, fetch from API
+  try {
+    const response = await fetch(`${API_BASE}/api/chat/user/${userId}`, {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+    });
+
+    // First check if the response is OK
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    // Then check if the response is JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      console.error('Response is not JSON:', await response.text());
+      return { id: userId, name: 'Someone' };
+    }
+
+    const data = await response.json();
+    
+    // Check if the response has the expected structure
+    if (data?.success && data.user) {
+      // Update cache
+      const updatedCache = { ...cache, [userId]: data.user };
+      localStorage.setItem(USER_CACHE_KEY, JSON.stringify(updatedCache));
+      return data.user;
+    } else if (data?.user) {
+      // Handle case where success flag might be missing but user data exists
+      const updatedCache = { ...cache, [userId]: data.user };
+      localStorage.setItem(USER_CACHE_KEY, JSON.stringify(updatedCache));
+      return data.user;
+    }
+    
+    console.error('Unexpected API response:', data);
+    return { id: userId, name: 'Someone' };
+    
+  } catch (error) {
+    console.error('Error fetching user details:', error);
+    return { id: userId, name: 'Someone' };
+  }
+};
+
 export default function GroupChatWindow({ currentUserId, group, messages = [], onSend }) {
   const [groupMessages, setGroupMessages] = useState(messages);
 
@@ -26,6 +91,7 @@ export default function GroupChatWindow({ currentUserId, group, messages = [], o
   };
 
   const [typingUserId, setTypingUserId] = useState(null);
+  const [userCache, setUserCache] = useState({});
   const endRef = useRef(null);
 
   // Scroll to bottom when messages change
@@ -186,6 +252,46 @@ export default function GroupChatWindow({ currentUserId, group, messages = [], o
     onSend?.(msg);
   };
 
+  // Load user details when typingUserId changes
+  useEffect(() => {
+    if (!typingUserId) return;
+    
+    const loadUser = async () => {
+      const user = await getUserDetails(typingUserId, currentUserId);
+      setUserCache(prev => ({
+        ...prev,
+        [typingUserId]: user
+      }));
+    };
+    
+    loadUser();
+  }, [typingUserId, currentUserId]);
+
+  // Clean up typing indicator after delay
+  useEffect(() => {
+    if (!typingUserId) return;
+    
+    const timer = setTimeout(() => {
+      setTypingUserId(null);
+    }, 3000);
+    
+    return () => clearTimeout(timer);
+  }, [typingUserId]);
+
+  // Listen for typing events
+  useEffect(() => {
+    if (!group?.id) return;
+    
+    const handleTyping = (data) => {
+      if (data.groupId === group.id && data.userId !== currentUserId) {
+        setTypingUserId(data.userId);
+      }
+    };
+    
+    window.socket?.on('user-typing', handleTyping);
+    return () => window.socket?.off('user-typing', handleTyping);
+  }, [group?.id, currentUserId]);
+
   if (!group) {
     return null;
   }
@@ -235,6 +341,53 @@ export default function GroupChatWindow({ currentUserId, group, messages = [], o
                       {(m.content ?? m.text) && (
                         <span className="msg-text">{m.content ?? m.text}</span>
                       )}
+                      {/* File attachments */}
+                      {m.attachments?.map((file, fileIdx) => {
+                        const isImage = file.type?.startsWith('image/');
+                        return (
+                          <div key={fileIdx} className="file-attachment" style={{ marginTop: '8px', maxWidth: '300px' }}>
+                            {isImage ? (
+                              <a href={file.url} target="_blank" rel="noopener noreferrer">
+                                <img 
+                                  src={file.url} 
+                                  alt={file.name || 'Image'} 
+                                  style={{ 
+                                    maxWidth: '100%', 
+                                    maxHeight: '200px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #e0e0e0'
+                                  }} 
+                                />
+                              </a>
+                            ) : (
+                              <a 
+                                href={file.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  padding: '8px',
+                                  backgroundColor: '#f5f5f5',
+                                  borderRadius: '8px',
+                                  textDecoration: 'none',
+                                  color: '#333',
+                                  border: '1px solid #e0e0e0'
+                                }}
+                              >
+                                <i className="fas fa-file" style={{ marginRight: '8px' }}></i>
+                                <span style={{ 
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis'
+                                }}>
+                                  {file.name || 'Download file'}
+                                </span>
+                              </a>
+                            )}
+                          </div>
+                        );
+                      })}
                       {/* Timestamp + read/unread badge */}
                       <span className="message-time" style={{ marginLeft: 4 }}>
                         
@@ -258,16 +411,65 @@ export default function GroupChatWindow({ currentUserId, group, messages = [], o
       {onSend && (
         <div className="chat-input-container">
           {typingUserId && (
-            (() => {
-              const member = group?.members?.find(m => (m._id ?? m.id) === typingUserId);
-              const name = member?.name || (typingUserId === currentUserId ? 'You' : 'Someone');
-              return (
-                <div className="typing-indicator" style={{ fontStyle: 'italic', color: '#666', marginBottom: 4 }}>
-                  <i className="fas fa-ellipsis-h fa-fw fa-pulse" style={{ marginRight: 6 }}></i>
-                  {name} is typing…
-                </div>
-              );
-            })()
+            <div className="typing-indicator" style={{
+              display: 'flex',
+              alignItems: 'center',
+              background: 'transparent',
+              borderRadius: '18px',
+              padding: '10px 12px',
+              marginBottom: '8px',
+              width: 'fit-content',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+              fontSize: '13px',
+              color: '#54656f',
+              fontFamily: 'Segoe UI, system-ui, -apple-system, sans-serif',
+              transition: 'all 0.2s ease-in-out'
+            }}>
+              <div className="typing-dots" style={{
+                display: 'flex',
+                alignItems: 'center',
+                marginRight: '8px',
+                height: '20px'
+              }}>
+                <span style={{
+                  display: 'inline-block',
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: '#8696a0',
+                  margin: '0 2px',
+                  animation: 'bounce 1.5s infinite ease-in-out',
+                  animationDelay: '0s'
+                }}></span>
+                <span style={{
+                  display: 'inline-block',
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: '#8696a0',
+                  margin: '0 2px',
+                  animation: 'bounce 1.5s infinite ease-in-out',
+                  animationDelay: '0.2s'
+                }}></span>
+                <span style={{
+                  display: 'inline-block',
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: '#8696a0',
+                  margin: '0 2px',
+                  animation: 'bounce 1.5s infinite ease-in-out',
+                  animationDelay: '0.4s'
+                }}></span>
+              </div>
+              <span style={{ fontWeight: 500 }}>{userCache[typingUserId]?.name || 'Someone'}</span> <span style={{ padding: '0 5px' }}>is typing...</span>
+              <style>{
+                `@keyframes bounce {
+                  0%, 60%, 100% { transform: translateY(0); }
+                  30% { transform: translateY(-4px); }
+                }`
+              }</style>
+            </div>
           )}
           <MessageInput
             onSend={handleSendMessage}
