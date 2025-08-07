@@ -10,16 +10,42 @@ const cors = require('cors');
 const PORT = process.env.PORT || 3001;
 
 const app = express();
-app.use(cors());
+
+// CORS configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',  // Vite dev server
+  'http://127.0.0.1:5173',  // Sometimes browsers use this
+  process.env.FRONTEND_URL  // Any custom URL from env
+].filter(Boolean);
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  methods: ['GET', 'POST'],
+  credentials: true
+}));
 
 // Basic health-check endpoint
-app.get('/', (req, res) => {
-  res.send('Socket.IO chat server is running');
+app.get('/health', (req, res) => {
+  res.json({ status: 'Chat service is running' });
 });
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: '*' },
+  cors: {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
 });
 
 io.on('connection', (socket) => {
@@ -79,5 +105,5 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Socket.IO server listening on port ${PORT}`);
+  console.log(`Chat service running on port ${PORT}`);
 });
