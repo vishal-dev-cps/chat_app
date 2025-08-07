@@ -5,7 +5,7 @@ import EmojiPicker from 'emoji-picker-react';
 import './MessageInput.css';
 import { socket } from '../services/socket';
 
-export default function MessageInput({ disabled, onSend, groupId, currentUserId }) {
+export default function MessageInput({ disabled, onSend, groupId, currentUserId, selectedUserId }) {
   const [text, setText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [attachments, setAttachments] = useState([]);
@@ -68,13 +68,24 @@ export default function MessageInput({ disabled, onSend, groupId, currentUserId 
   }, []);
 
   // === Typing indicator via socket ===
+  // useEffect(() => {
+  //   if (!groupId || !currentUserId) return;
+  //   if (!text.trim()) return;
+
+  //   socket.emit('typing', { groupId, userId: currentUserId });
+  // }, [text, groupId, currentUserId]);
+
   useEffect(() => {
-    if (!groupId || !currentUserId) return;
-    if (!text.trim()) return;
-
-    socket.emit('typing', { groupId, userId: currentUserId });
-  }, [text, groupId, currentUserId]);
-
+    const trimmed = text.trim();
+    if (!trimmed || !currentUserId) return;
+  
+    if (groupId) {
+      socket.emit('typing', { groupId, userId: currentUserId });
+    } else if (selectedUserId) {
+      socket.emit('typing-private', { to: selectedUserId, from: currentUserId });
+    }
+  }, [text, groupId, selectedUserId, currentUserId]);
+  
   return (
     <div className="message-input-bar">
       <div className="emoji-picker-container" ref={emojiPickerRef}>
@@ -162,4 +173,5 @@ MessageInput.propTypes = {
   onSend: PropTypes.func,
   groupId: PropTypes.any,
   currentUserId: PropTypes.string,
+  selectedUserId: PropTypes.string,
 };

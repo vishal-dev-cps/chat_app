@@ -53,6 +53,8 @@ io.on('connection', (socket) => {
   if (userId) {
     socket.join(userId); // each user has their own room
     console.log(`User connected: ${userId}`);
+    // Notify others that this user is now online
+    io.emit('user-status-update', { userId, status: 'online' });
   } else {
     console.warn('Socket connected without userId');
   }
@@ -69,6 +71,14 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.error('Error handling chat_message:', err);
     }
+  });
+
+
+  // Typing indicator for private chat
+  socket.on('typing-private', ({ from, to }) => {
+    if (!to) return;
+    io.to(to).emit('typing-private', { from });
+    console.log(`typing-private: ${from} → ${to}`);
   });
 
   // === Group chat events ===
@@ -100,8 +110,24 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    // Notify others that this user went offline
+    io.emit('user-status-update', { userId, status: 'offline', lastSeen: Date.now() });
     console.log('Socket disconnected:', userId || socket.id);
   });
+
+  socket.on('typing-private', ({ from, to }) => {
+    if (!to) return;
+    io.to(to).emit('typing-private', { from });
+    console.log(`typing-private: ${from} → ${to}`);
+  });
+
+  socket.on('seen-private', ({ from, to }) => {
+    if (!to) return;
+    io.to(to).emit('seen-private', { from });
+    console.log(`seen-private: ${from} → ${to}`);
+  });
+
+
 });
 
 server.listen(PORT, () => {

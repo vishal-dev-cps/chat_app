@@ -6,6 +6,7 @@ import MessageInput from './MessageInput';
 import { getChatFromLocal, deleteChatHistory, saveChatToLocal, fetchChatHistory, updateMessageInHistory, softDeleteMessage } from '../services/chatService';
 import { backupMessages } from '../services/backupService';
 import { format } from 'date-fns';
+import { socket, connectSocket } from '../services/socket';
 
 export default function ChatWindow({ messages, selectedUser, currentUserId, onSend }) {
   const [hoveredMessage, setHoveredMessage] = useState(null);
@@ -64,7 +65,7 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
   }, [messages, scrollToBottom, selectedUser]);
 
   // Local state for dynamic status
-  const [userStatus, setUserStatus] = useState({ isOnline: false, isTyping: false, lastSeen: null });
+  const [usercurrentstatus, setUsercurrentstatus] = useState({ isOnline: false, isTyping: false, lastSeen: null });
 
   // Fetch status when selected user changes
   useEffect(() => {
@@ -73,7 +74,7 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
       fetchUserStatus(selectedUser.id)
         .then((data) => {
           if (!ignore) {
-            setUserStatus({ isOnline: data.isOnline, lastSeen: data.lastSeen, isTyping: false });
+            setUsercurrentstatus({ isOnline: data.isOnline, lastSeen: data.lastSeen, isTyping: false });
           }
         })
         .catch(console.error);
@@ -81,23 +82,84 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
     return () => { ignore = true; };
   }, [selectedUser]);
 
-  // Listen for real-time status updates via Socket.IO if available globally
+  // Listen for real-time status and typing updates via Socket.IO
   useEffect(() => {
-    const socket = window?.socket;
-    if (!socket || !selectedUser?.id) return;
+    const activeSocket = socket;
+    console.log('[DEBUG] effect check →',
+      { socketExists: !!activeSocket, selId: selectedUser?.id, curId: currentUserId });
 
-    const handler = (data) => {
+    if (!activeSocket || !selectedUser?.id || !currentUserId) return;
+    let typingTimeout;
+
+    if (!activeSocket.connected || activeSocket.auth?.userId !== currentUserId) {
+      console.log('[DEBUG] connecting socket with userId →', currentUserId);
+      connectSocket(currentUserId);
+    }
+
+    console.log('[DEBUG] activeSocket instance', activeSocket , activeSocket.auth.userId);
+
+    // Debug: log every incoming socket event
+    activeSocket.offAny();
+    activeSocket.onAny((evt, ...payload) => {
+      console.log('[SOCKET RX]', evt, ...payload);
+    });
+
+    // ----- listeners --------------------------------------------------
+    const addListeners = () => {
+      activeSocket.off('user-status-update', handleStatusUpdate);
+      activeSocket.off('typing-private', handleTypingPrivate);
+      activeSocket.on('user-status-update', handleStatusUpdate);
+      activeSocket.on('typing-private', handleTypingPrivate);
+      // also listen for group typing event name used on server
+      activeSocket.on('user-typing', handleTypingPrivate);
+    };
+
+    // Attach listeners once
+    addListeners();
+
+    function handleStatusUpdate(data) {
+      console.log("console data",data);
       if (data.userId === selectedUser.id) {
-        setUserStatus((prev) => ({ ...prev, isOnline: data.status === 'online', lastSeen: data.lastSeen }));
+        console.log('Status update payload:', data);
+        setUsercurrentstatus(prev => ({
+          ...prev,
+          isOnline: data.status === 'online',
+          lastSeen: data.lastSeen || prev.lastSeen
+        }));
       }
     };
-    socket.on?.('user-status-update', handler);
-    return () => socket.off?.('user-status-update', handler);
-  }, [selectedUser]);
 
-  const isTyping = userStatus.isTyping || selectedUser?.isTyping;
-  const isOnline = userStatus.isOnline;
-  const statusText = isTyping ? 'typing…' : isOnline ? 'online' : 'offline';
+    function handleTypingPrivate(data) {
+      console.log('Typing payload raw:', data);
+      console.log('Typing-private payload:', data);
+      if (data.from === selectedUser.id) {
+        setUsercurrentstatus(prev => ({ ...prev, isTyping: true }));
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => {
+          setUsercurrentstatus(prev => ({ ...prev, isTyping: false }));
+        }, 2000);
+      }
+    };
+
+
+
+    return () => {
+      activeSocket.off('user-status-update', handleStatusUpdate);
+      activeSocket.off('typing-private', handleTypingPrivate);
+      activeSocket.offAny?.();
+      clearTimeout(typingTimeout);
+    };
+  }, [selectedUser?.id, currentUserId]);
+
+  const isTyping = usercurrentstatus.isTyping;
+  const isOnline = usercurrentstatus.isOnline;
+  const statusText = isTyping
+    ? 'Typing...'
+    : isOnline
+      ? 'Online'
+      : usercurrentstatus.lastSeen
+        ? `Last seen: ${new Date(usercurrentstatus.lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+        : 'Offline';
   const statusClass = isTyping ? 'typing' : isOnline ? 'online' : 'offline';
 
   // Filter and sort messages for the selected user
@@ -200,8 +262,8 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
             filteredMessages.map((m, i) => {
               const isSent = m.from === currentUserId;
               return (
-                <div 
-                  key={i} 
+                <div
+                  key={i}
                   className={`message-wrapper ${isSent ? 'sent' : 'received'}`}
                   onMouseEnter={() => setHoveredMessage(m.id)}
                   onMouseLeave={() => setHoveredMessage(null)}
@@ -209,7 +271,7 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
                   <div className={`message-content ${isSent ? 'sent' : 'received'}`}>
                     <div className="message-actions">
                       {isSent && hoveredMessage === m.id && (
-                        <button 
+                        <button
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDeleteMessage(m);
@@ -261,12 +323,24 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
               );
             })
           )}
+          {isTyping && (
+            <div className="typing-indicator">
+              <span className="typing-dot">•</span>
+              <span className="typing-dot">•</span>
+              <span className="typing-dot">•</span>
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
       </div>
       {onSend && (
         <div className="chat-input-container">
-          <MessageInput onSend={onSend} disabled={!selectedUser} />
+          <MessageInput
+            onSend={onSend}
+            disabled={!selectedUser}
+            currentUserId={currentUserId}
+            selectedUserId={selectedUser?.id}
+          />
         </div>
       )}
     </div>
