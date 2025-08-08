@@ -39,4 +39,16 @@ export async function fetchGroups() {
   }
 }
 
-export default { createGroup, fetchGroups };
+export async function updateGroup(id, updateFields = {}, userId) {
+  if (!id) throw new Error('Group id is required');
+  try {
+    const payload = userId ? { userId, ...updateFields } : updateFields;
+  const res = await apiClient.patch(`/api/groups/${id}`, payload);
+    return res.data;
+  } catch (error) {
+    console.error('Error updating group:', error);
+    throw error;
+  }
+}
+
+export default { createGroup, fetchGroups, updateGroup };

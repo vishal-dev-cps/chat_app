@@ -523,10 +523,13 @@ export default function App() {
             <GroupList
               groups={groups}
               selected={selectedGroup}
+              users={users}
+              currentUserId={currentUserId}
               onSelect={(g) => {
                 setSelectedGroup(g);
                 setSelectedUser(null);
               }}
+              onUpdated={refreshGroups}
             />
           )}
         </div>
