@@ -1,0 +1,17 @@
+{
+  "hosting": {
+    "site": "chat-site-85236",
+    "public": "react-chat/dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

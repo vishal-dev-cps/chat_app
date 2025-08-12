@@ -1,7 +1,7 @@
 // backupService.js
 // Handles posting chat backups to backend API
 
-const BACKUP_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/chat/message`;
+const BACKUP_URL = `${import.meta.env.VITE_API_URL || 'https://us-central1-securityerp.cloudfunctions.net'}/api/chat/message`;
 
 /**
  * Send messages array to backup endpoint.

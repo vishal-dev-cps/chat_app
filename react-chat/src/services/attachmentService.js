@@ -15,7 +15,7 @@
 // NOTE: All functions are exported individually for tree-shaking, plus a
 // default export containing all helpers for convenience.
 
-const API_UPLOAD_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/chat/upload`;
+const API_UPLOAD_URL = `${import.meta.env.VITE_API_URL || 'https://us-central1-securityerp.cloudfunctions.net'}/api/chat/upload`;
 
 /**
  * Convert bytes to a human-readable string.

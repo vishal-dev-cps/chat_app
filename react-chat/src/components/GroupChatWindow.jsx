@@ -4,7 +4,7 @@ import MessageInput from './MessageInput';
 import './ChatWindow.css';
 import { socket, connectSocket } from '../services/socket';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://us-central1-securityerp.cloudfunctions.net';
 
 const USER_CACHE_KEY = 'chat_user_cache';
 
