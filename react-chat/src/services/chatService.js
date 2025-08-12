@@ -72,9 +72,11 @@ export const getChatFromLocal = (currentUserId, otherUserId) => {
 
 // API base URL
 const API_BASE_URL = 'https://us-central1-securityerp.cloudfunctions.net';
+//const API_BASE_URL = 'http://localhost:3000';
 
 // API base URL
 const API_BASE = import.meta.env.VITE_API_URL || 'https://us-central1-securityerp.cloudfunctions.net';
+//const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 // Fetch user status
 function authHeaders() {

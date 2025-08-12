@@ -333,6 +333,7 @@ export default function App() {
     if (!currentUserId) return;
     const handler = () => {
       navigator.sendBeacon && navigator.sendBeacon(
+        //`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/chat/user/status`,
         `${import.meta.env.VITE_API_URL || 'https://us-central1-securityerp.cloudfunctions.net'}/api/chat/user/status`,
         JSON.stringify({ userId: currentUserId, status: 'offline' })
       );
