@@ -9,9 +9,17 @@
     ],
     "rewrites": [
       {
+        "source": "/socket.io/**",
+        "run": {
+          "serviceId": "chat-backend",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
     ]
   }
 }
+  

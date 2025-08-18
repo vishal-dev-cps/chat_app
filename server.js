@@ -13,7 +13,7 @@ const app = express();
 
 // CORS configuration
 const allowedOrigins = [
-  'https://us-central1-securityerp.cloudfunctions.net',
+  'https://chat-site-85236.web.app',
   'http://localhost:5173',  // Vite dev server
   'http://127.0.0.1:5173',  // Sometimes browsers use this
   process.env.FRONTEND_URL  // Any custom URL from env

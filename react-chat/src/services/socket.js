@@ -2,7 +2,9 @@ import { io } from 'socket.io-client';
 
 // Use Vite env variable if provided, otherwise fall back to localhost:3001
 // const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://chat-site-85236.web.app';
+// const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://chat-site-85236.web.app';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://chat-backend-174088616384.us-central1.run.app';
+
 
 // Single shared socket instance
 export const socket = io(SOCKET_URL, {
