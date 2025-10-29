@@ -134,42 +134,6 @@ const isWindowFocused = () => {
   return document.hasFocus();
 };
 
-// Test notification function
-export const testNotification = () => {
-  console.log('Testing direct notification...');
-  
-  // Check if notifications are supported
-  if (!('Notification' in window)) {
-    alert('This browser does not support desktop notifications');
-    return;
-  }
-
-  // Check if notification permissions have already been granted
-  if (Notification.permission === 'granted') {
-    // If it's okay, create a notification
-    const notification = new Notification('Test Notification', {
-      body: 'This is a direct test notification',
-      icon: '/favicon.ico'
-    });
-    
-    notification.onclick = function(event) {
-      event.preventDefault();
-      window.focus();
-      this.close();
-    };
-    
-    console.log('Direct notification shown');
-  }
-  // Otherwise, ask the user for permission
-  else if (Notification.permission !== 'denied') {
-    Notification.requestPermission().then(function(permission) {
-      if (permission === 'granted') {
-        testNotification(); // Try again now that we have permission
-      }
-    });
-  }
-};
-
 // Show a chat message notification
 export const showChatNotification = (message, users = []) => {
   console.log('showChatNotification called with:', { message, users });

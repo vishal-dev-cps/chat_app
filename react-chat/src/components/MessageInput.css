@@ -127,4 +127,96 @@
 .remove-attachment{
   background:none;border:none;color:#dc3545;font-size:18px;line-height:1;padding:0 2px;cursor:pointer;
   position:absolute;top:-6px;right:-4px;
+}
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  .message-input-bar {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .message-input-bar .form-control {
+    padding: 8px 10px;
+    font-size: 0.9rem;
+  }
+
+  .message-input-bar .icon-btn {
+    font-size: 20px;
+    padding: 6px;
+  }
+
+  .attachments-bar {
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+
+  .attachment-preview {
+    max-width: 140px;
+    padding: 3px 6px 3px 3px;
+  }
+
+  .img-thumb {
+    width: 36px;
+    height: 36px;
+  }
+
+  .file-name {
+    font-size: 11px;
+  }
+
+  .file-size {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .message-input-bar {
+    padding: 6px 8px;
+    gap: 4px;
+  }
+
+  .message-input-bar .form-control {
+    padding: 7px 9px;
+    font-size: 0.85rem;
+    min-width: 40px;
+  }
+
+  .message-input-bar .icon-btn {
+    font-size: 18px;
+    padding: 5px;
+  }
+
+  .attachments-bar {
+    gap: 4px;
+    margin-bottom: 3px;
+  }
+
+  .attachment-preview {
+    max-width: 120px;
+    padding: 2px 5px 2px 2px;
+  }
+
+  .img-thumb {
+    width: 32px;
+    height: 32px;
+    margin-right: 4px;
+  }
+
+  .file-icon {
+    font-size: 28px;
+    margin: 0 4px 0 2px;
+  }
+
+  .file-name {
+    font-size: 10px;
+  }
+
+  .file-size {
+    font-size: 9px;
+  }
+
+  .remove-attachment {
+    font-size: 16px;
+  }
 } 

@@ -118,3 +118,68 @@
   display: flex;
   align-items: center;
 }
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  .group-list-header {
+    padding: 6px 12px;
+    font-size: 11px;
+  }
+
+  .group-item {
+    padding: 8px 12px;
+  }
+
+  .group-avatar {
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+    margin-right: 10px;
+  }
+
+  .group-name {
+    font-size: 0.9rem;
+  }
+
+  .group-meta,
+  .members-preview {
+    font-size: 12px;
+  }
+
+  .subtitle-group {
+    font-size: 13px;
+    padding: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .group-list-header {
+    padding: 5px 10px;
+    font-size: 10px;
+  }
+
+  .group-item {
+    padding: 7px 10px;
+  }
+
+  .group-avatar {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+    margin-right: 8px;
+  }
+
+  .group-name {
+    font-size: 0.85rem;
+  }
+
+  .group-meta,
+  .members-preview {
+    font-size: 11px;
+  }
+
+  .subtitle-group {
+    font-size: 12px;
+    padding: 10px;
+  }
+}

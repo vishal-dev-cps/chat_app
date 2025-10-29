@@ -12,19 +12,19 @@ const USER_CACHE_KEY = 'chat_user_cache';
 // Function to get user from cache or fetch if not exists
 const getUserDetails = async (userId, currentUserId) => {
   if (!userId) return null;
-  
+
   // Check if user is the current user
   if (userId === currentUserId) {
     const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
     if (currentUser.id) return { ...currentUser, name: 'You' };
   }
-  
+
   // Check cache
   const cache = JSON.parse(localStorage.getItem(USER_CACHE_KEY) || '{}');
   if (cache[userId]) {
     return cache[userId];
   }
-  
+
   // If not in cache, fetch from API
   try {
     const response = await fetch(`${API_BASE}/api/chat/user/${userId}`, {
@@ -47,7 +47,7 @@ const getUserDetails = async (userId, currentUserId) => {
     }
 
     const data = await response.json();
-    
+
     // Check if the response has the expected structure
     if (data?.success && data.user) {
       // Update cache
@@ -60,17 +60,17 @@ const getUserDetails = async (userId, currentUserId) => {
       localStorage.setItem(USER_CACHE_KEY, JSON.stringify(updatedCache));
       return data.user;
     }
-    
+
     console.error('Unexpected API response:', data);
     return { id: userId, name: 'Someone' };
-    
+
   } catch (error) {
     console.error('Error fetching user details:', error);
     return { id: userId, name: 'Someone' };
   }
 };
 
-export default function GroupChatWindow({ currentUserId, group, messages = [], onSend }) {
+export default function GroupChatWindow({ currentUserId, group, messages = [], onSend, onBack }) {
   const [groupMessages, setGroupMessages] = useState(messages);
 
   // ---------- LocalStorage helpers ----------
@@ -88,7 +88,7 @@ export default function GroupChatWindow({ currentUserId, group, messages = [], o
   const saveToLocal = (gid, msgs) => {
     try {
       localStorage.setItem(getStorageKey(gid), JSON.stringify(msgs));
-    } catch {/* ignore quota errors */}
+    } catch {/* ignore quota errors */ }
   };
 
   const [typingUserId, setTypingUserId] = useState(null);
@@ -256,7 +256,7 @@ export default function GroupChatWindow({ currentUserId, group, messages = [], o
   // Load user details when typingUserId changes
   useEffect(() => {
     if (!typingUserId) return;
-    
+
     const loadUser = async () => {
       const user = await getUserDetails(typingUserId, currentUserId);
       setUserCache(prev => ({
@@ -264,31 +264,31 @@ export default function GroupChatWindow({ currentUserId, group, messages = [], o
         [typingUserId]: user
       }));
     };
-    
+
     loadUser();
   }, [typingUserId, currentUserId]);
 
   // Clean up typing indicator after delay
   useEffect(() => {
     if (!typingUserId) return;
-    
+
     const timer = setTimeout(() => {
       setTypingUserId(null);
     }, 3000);
-    
+
     return () => clearTimeout(timer);
   }, [typingUserId]);
 
   // Listen for typing events
   useEffect(() => {
     if (!group?.id) return;
-    
+
     const handleTyping = (data) => {
       if (data.groupId === group.id && data.userId !== currentUserId) {
         setTypingUserId(data.userId);
       }
     };
-    
+
     window.socket?.on('user-typing', handleTyping);
     return () => window.socket?.off('user-typing', handleTyping);
   }, [group?.id, currentUserId]);
@@ -300,6 +300,11 @@ export default function GroupChatWindow({ currentUserId, group, messages = [], o
   return (
     <div className="chat-window">
       <div className="chat-header">
+        {onBack && (
+          <button className="back-button" onClick={onBack}>
+            <i className="fas fa-arrow-left"></i>
+          </button>
+        )}
         <div className="header-info">
           <span className="name">{group.name}</span>
           <span className="members-preview">{Array.isArray(group.members) ? group.members.length : 0} members</span>
@@ -330,7 +335,7 @@ export default function GroupChatWindow({ currentUserId, group, messages = [], o
               const isSent = m.senderId === currentUserId;
               return (
                 <div key={m.id || m.timestamp || idx} className={`message-wrapper ${isSent ? 'sent' : 'received'}`}>
-                  <div className={`message-content ${isSent ? 'sent' : 'received'}`}>                    
+                  <div className={`message-content ${isSent ? 'sent' : 'received'}`}>
                     <div className={`msg-bubble ${isSent ? 'sent' : 'received'}`} style={{ textAlign: 'left' }}>
                       {/* Sender name for group messages (only show for received messages) */}
                       {!isSent && senderName && (
@@ -349,21 +354,21 @@ export default function GroupChatWindow({ currentUserId, group, messages = [], o
                           <div key={fileIdx} className="file-attachment" style={{ marginTop: '8px', maxWidth: '300px' }}>
                             {isImage ? (
                               <a href={file.url} target="_blank" rel="noopener noreferrer">
-                                <img 
-                                  src={file.url} 
-                                  alt={file.name || 'Image'} 
-                                  style={{ 
-                                    maxWidth: '100%', 
+                                <img
+                                  src={file.url}
+                                  alt={file.name || 'Image'}
+                                  style={{
+                                    maxWidth: '100%',
                                     maxHeight: '200px',
                                     borderRadius: '8px',
                                     border: '1px solid #e0e0e0'
-                                  }} 
+                                  }}
                                 />
                               </a>
                             ) : (
-                              <a 
-                                href={file.url} 
-                                target="_blank" 
+                              <a
+                                href={file.url}
+                                target="_blank"
                                 rel="noopener noreferrer"
                                 style={{
                                   display: 'flex',
@@ -377,7 +382,7 @@ export default function GroupChatWindow({ currentUserId, group, messages = [], o
                                 }}
                               >
                                 <i className="fas fa-file" style={{ marginRight: '8px' }}></i>
-                                <span style={{ 
+                                <span style={{
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis'
@@ -391,7 +396,7 @@ export default function GroupChatWindow({ currentUserId, group, messages = [], o
                       })}
                       {/* Timestamp + read/unread badge */}
                       <span className="message-time" style={{ marginLeft: 4 }}>
-                        
+
                         {timeString}
                         {Array.isArray(m.seenBy) && m.seenBy.length > 0 ? (
                           <i className="fas fa-check-double text-primary"></i>
@@ -489,4 +494,5 @@ GroupChatWindow.propTypes = {
   group: PropTypes.object,
   messages: PropTypes.array,
   onSend: PropTypes.func,
+  onBack: PropTypes.func,
 };

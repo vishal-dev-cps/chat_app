@@ -161,3 +161,90 @@
 .user-list::-webkit-scrollbar-track {
   background-color: var(--sidebar-bg);
 }
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  .user-group-header {
+    padding: 6px 12px;
+    font-size: 11px;
+  }
+
+  .user-item {
+    padding: 8px 12px;
+    padding-right: 45px;
+  }
+
+  .user-avatar-sm {
+    width: 44px;
+    height: 44px;
+  }
+
+  .user-name {
+    font-size: 0.9rem;
+  }
+
+  .last-message-preview {
+    font-size: 12px;
+  }
+
+  .last-message-time {
+    font-size: 10px;
+  }
+
+  .unread-badge {
+    min-width: 18px;
+    height: 18px;
+    font-size: 11px;
+    right: 10px;
+  }
+
+  .status-dot {
+    width: 10px;
+    height: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .user-group-header {
+    padding: 5px 10px;
+    font-size: 10px;
+  }
+
+  .user-item {
+    padding: 7px 10px;
+    padding-right: 40px;
+  }
+
+  .user-avatar-sm {
+    width: 40px;
+    height: 40px;
+  }
+
+  .user-avatar-container {
+    margin-right: 10px;
+  }
+
+  .user-name {
+    font-size: 0.85rem;
+  }
+
+  .last-message-preview {
+    font-size: 11px;
+  }
+
+  .last-message-time {
+    font-size: 9px;
+  }
+
+  .unread-badge {
+    min-width: 16px;
+    height: 16px;
+    font-size: 10px;
+    right: 8px;
+  }
+
+  .status-dot {
+    width: 9px;
+    height: 9px;
+  }
+}

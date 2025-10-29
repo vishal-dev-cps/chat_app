@@ -249,3 +249,86 @@ body {
   background: var(--button-bg);
   border: none;
 }
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  .app-wrapper {
+    flex-direction: column;
+    padding-bottom: 0;
+  }
+
+  .sidebar {
+    width: 100% !important;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .chat-window {
+    width: 100%;
+  }
+
+  .msg-bubble {
+    max-width: 75%;
+    font-size: 0.85rem;
+  }
+
+  .chat-header {
+    padding: 0 12px;
+    height: 56px;
+  }
+
+  .chat-header img {
+    width: 36px;
+    height: 36px;
+  }
+
+  .chat-messages {
+    padding: 12px;
+  }
+
+  .message-input-bar {
+    padding: 8px;
+  }
+
+  .sidebar-header {
+    height: 56px;
+    padding: 0 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .msg-bubble {
+    max-width: 85%;
+    font-size: 0.8rem;
+    padding: 6px 10px;
+  }
+
+  .chat-header {
+    height: 50px;
+    padding: 0 8px;
+  }
+
+  .chat-header img {
+    width: 32px;
+    height: 32px;
+    margin-right: 8px;
+  }
+
+  .chat-header .name {
+    font-size: 0.9rem;
+  }
+
+  .chat-messages {
+    padding: 8px;
+  }
+
+  .user-avatar-sm {
+    width: 28px;
+    height: 28px;
+    margin-right: 8px;
+  }
+
+  .user-item {
+    padding: 10px 12px;
+  }
+}
