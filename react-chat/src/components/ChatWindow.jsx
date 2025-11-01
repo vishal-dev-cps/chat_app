@@ -8,7 +8,7 @@ import { backupMessages } from '../services/backupService';
 import { format } from 'date-fns';
 import { socket, connectSocket } from '../services/socket';
 
-export default function ChatWindow({ messages, selectedUser, currentUserId, onSend }) {
+export default function ChatWindow({ messages, selectedUser, currentUserId, onSend, onBack }) {
   const [hoveredMessage, setHoveredMessage] = useState(null);
   const handleBackup = async () => {
     try {
@@ -185,6 +185,11 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
   return (
     <div className="chat-window">
       <div className="chat-header">
+        {onBack && (
+          <button className="back-button" onClick={onBack}>
+            <i className="fas fa-arrow-left"></i>
+          </button>
+        )}
         <img
           src={selectedUser.photoURL}
           alt={selectedUser.displayName}

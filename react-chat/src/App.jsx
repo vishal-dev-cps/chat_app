@@ -9,7 +9,7 @@ import { loadUsers } from './services/userService';
 import api from './services/api';
 import { fetchUserStatus, updateUserStatus } from './services/chatService';
 import { fetchChatHistory, saveChatToLocal, updateMessageInHistory } from './services/chatService';
-import { requestNotificationPermission, showChatNotification, testNotification } from './services/notificationService';
+import { requestNotificationPermission, showChatNotification } from './services/notificationService';
 import { socket, connectSocket, disconnectSocket } from './services/socket';
 import ChatWindow from './components/ChatWindow';
 import GroupChatWindow from './components/GroupChatWindow';
@@ -34,6 +34,7 @@ export default function App() {
   const [groups, setGroups] = useState([]);
   const [sidebarTab, setSidebarTab] = useState('chats'); // 'chats' | 'groups'
   const [readStatus, setReadStatus] = useState({});
+  const [showMobileChat, setShowMobileChat] = useState(false); // Mobile navigation state
   // Register for notifications and handle window focus/blur events
   useEffect(() => {
     // Request notification permission
@@ -342,7 +343,7 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [currentUserId]);
 
-  // Listen for messages via localStorage events (cross-tab demo)
+  // Listen for messages via localStorage events (cross-tab sync)
   useEffect(() => {
     function handleStorage(e) {
       if (e.key === 'chat_message' && e.newValue) {
@@ -476,25 +477,8 @@ export default function App() {
         setCurrentUserId(id);
         window.history.replaceState({}, '', `?securityId=${id}`);
       }} />
-      {/* <button 
-          onClick={testNotification}
-          style={{
-            position: 'fixed',
-            bottom: '20px',
-            right: '20px',
-            zIndex: 1000,
-            padding: '10px 20px',
-            backgroundColor: '#007bff',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: 'pointer'
-          }}
-        >
-          Test Notification
-        </button> */}
       <div className="app-wrapper">
-        <div className="sidebar">
+        <div className={`sidebar ${showMobileChat ? 'mobile-hidden' : ''}`}>
           <div className="sidebar-tabs d-flex">
             <button className={`flex-fill btn btn-sm ${sidebarTab === 'chats' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setSidebarTab('chats')}>Chats</button>
             <button className={`flex-fill btn btn-sm ${sidebarTab === 'groups' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setSidebarTab('groups')}>Groups</button>
@@ -515,6 +499,7 @@ export default function App() {
               onSelect={(user) => {
                 setSelectedUser(user);
                 setSelectedGroup(null);
+                setShowMobileChat(true); // Show chat on mobile
                 // mark messages from this user as read
                 setMessages(prev => prev.map(m => (m.from === user.id && m.to === currentUserId ? { ...m, status: 'read' } : m)));
               }}
@@ -529,18 +514,20 @@ export default function App() {
               onSelect={(g) => {
                 setSelectedGroup(g);
                 setSelectedUser(null);
+                setShowMobileChat(true); // Show chat on mobile
               }}
               onUpdated={refreshGroups}
             />
           )}
         </div>
-        <div className="chat-area d-flex flex-column">
+        <div className={`chat-area d-flex flex-column ${showMobileChat ? 'mobile-visible' : ''}`}>
           {selectedGroup ? (
             <GroupChatWindow
               currentUserId={currentUserId}
               group={selectedGroup}
               messages={groupMessages}
               onSend={sendGroupMessage}
+              onBack={() => setShowMobileChat(false)}
             />
           ) : (
             <ChatWindow
@@ -548,6 +535,7 @@ export default function App() {
               selectedUser={selectedUser}
               currentUserId={currentUserId}
               onSend={sendMessage}
+              onBack={() => setShowMobileChat(false)}
             />
           )}
         </div>
