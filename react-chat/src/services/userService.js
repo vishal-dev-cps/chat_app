@@ -72,7 +72,7 @@ export async function loadUsers(currentUser) {
       `https://ui-avatars.com/api/?name=${encodeURIComponent(u.displayName || u.name || 'U')}&background=random`,
   }));
 
-    // 2. fetch ALL personnel (security) for everyone
+  // 2. fetch ALL personnel (security) for everyone
   const allPersonnelResp = await apiClient.get('/api/security/personnel/internal');
   let securityUsers = [];
   if (allPersonnelResp.data.success) {
@@ -81,7 +81,7 @@ export async function loadUsers(currentUser) {
       userId: p.id,
       role: 'security',
       displayName: p.displayName || p.name || p.email || 'Security',
-      photoURL: p.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent((p.displayName||p.name||'S'))}&background=random`,
+      photoURL: p.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent((p.displayName || p.name || 'S'))}&background=random`,
 
     }));
   }
@@ -102,48 +102,50 @@ export async function loadUsers(currentUser) {
     users = users.filter((u) => ['admin', 'security', 'superAdmin'].includes(u.role));
   }
   // ----- SECTION: ADMIN -----
-  else if (roleLower === 'admins') { 
+  else if (roleLower === 'admins' || roleLower === 'admin') {
     try {
-      // Fetch admin's sites
-      const adminSitesResponse = await apiClient.get(`/api/security/sites/admin/${currentUser.id}`);
-      const siteIds = adminSitesResponse.data?.sites?.map(site => site.id) || [];
-      console.log('[userService] Admin sites:', siteIds);
-      
-      // Fetch personnel for each site
-      const allPersonnel = [];
-      for (const siteId of siteIds) {
-        try {
-          const personnelResponse = await apiClient.get(`/api/security/sites/${siteId}/personnel`);
-          const sitePersonnel = personnelResponse.data?.personnel || [];
-          console.log(`[userService] Personnel for site ${siteId}:`, sitePersonnel);
-          allPersonnel.push(...sitePersonnel);
-        } catch (personnelError) {
-          console.error(`[userService] Error fetching personnel for site ${siteId}:`, personnelError);
-        }
-      }
-      
-      console.log('[userService] All personnel across sites:', allPersonnel);
-      
-      // Get unique personnel IDs from all sites
-      const personnelIds = [...new Set(allPersonnel.map(p => p.id))];
-      
-      // Filter users to include:
-      // 1. Superadmins
-      // 2. The current admin
-      // 3. Personnel from the admin's sites
-      users = users.filter(u => 
-        u.role === 'superAdmin' || 
-        u.id === currentUser.id || 
-        personnelIds.includes(u.id)
+      console.log('[userService] Fetching personnel via new admin endpoint');
+
+      const resp = await apiClient.get(
+        `/api/security/personnel/by-admin/${currentUser.id}`,
+        { headers: { "x-chat-internal-key": "54OD6H0UIpwP9uYv2xGfMct7mdkSdwLQ9vUJYrI004WWl9kRPRiOGGY3QlzYK1JHdWcjq6xQrldZsfqvVuXf9JV3SKp61gx3uCcucZ86Xb5Su1kf" } }
       );
-      
+
+      const personnel = resp.data?.personnel || [];
+      console.log("[userService] Admin personnel:", personnel);
+
+      const formattedPersonnel = personnel.map(p => ({
+        ...p,
+        userId: p.id,
+        role: 'security',                                       // ✅ keep role as security
+        displayName: p.name || p.email || `Security ${p.id.slice(0, 4)}`,
+        photoURL: p.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name || 'S')}&background=random`,
+        status: p.status || 'offline'
+      }));
+
+      // Merge personnel + other chat users
+      const mergedById = new Map();
+      [...securityUsers, ...formattedPersonnel, ...chatUsers].forEach(u => {
+        mergedById.set(u.userId || u.id, u);
+      });
+
+      users = Array.from(mergedById.values());
+
+      // Filter: SuperAdmins + current admin + only admin site personnel
+      users = users.filter(u =>
+        u.role === 'superAdmin' ||
+        u.id === currentUser.id ||
+        formattedPersonnel.some(fp => fp.id === u.id)
+      );
+
       console.log('[userService] Filtered users for admin:', users);
+
     } catch (error) {
-      console.error('[userService] Error in admin section:', error);
-      // Fallback to original filter if API call fails
-      users = users.filter((u) => ['admin', 'security', 'superAdmin'].includes(u.role));
+      console.error('[userService] Error loading admin personnel:', error);
+      users = users.filter(u => ['admin', 'security', 'superAdmin'].includes(u.role));
     }
   }
+
   // ----- SECTION: REGULAR USER (ELSE) -----
   else {
     console.log('[userService] Regular user logged in - applying filters');
@@ -167,11 +169,11 @@ export async function loadUsers(currentUser) {
     // First sort by role priority (descending)
     const roleDiff = (rolePriority[b.role] || 0) - (rolePriority[a.role] || 0);
     if (roleDiff !== 0) return roleDiff;
-    
+
     // If same role, sort by online status (online first)
     if (a.status === 'online' && b.status !== 'online') return -1;
     if (a.status !== 'online' && b.status === 'online') return 1;
-    
+
     // If same status, sort by name
     return (a.displayName || '').localeCompare(b.displayName || '');
   });

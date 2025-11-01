@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import MessageInput from './MessageInput';
 import './ChatWindow.css';
 import { socket, connectSocket } from '../services/socket';
+import MemberListModal from './MemberListModal'; 
 
 //const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const API_BASE = import.meta.env.VITE_API_URL || 'https://us-central1-securityerp.cloudfunctions.net';
@@ -72,6 +73,7 @@ const getUserDetails = async (userId, currentUserId) => {
 
 export default function GroupChatWindow({ currentUserId, group, messages = [], onSend }) {
   const [groupMessages, setGroupMessages] = useState(messages);
+  const [showMembersModal, setShowMembersModal] = useState(false);
 
   // ---------- LocalStorage helpers ----------
   const getStorageKey = (gid) => `group_chat_${String(gid)}`;
@@ -299,12 +301,18 @@ export default function GroupChatWindow({ currentUserId, group, messages = [], o
 
   return (
     <div className="chat-window">
-      <div className="chat-header">
+      <div className="chat-header" onClick={() => setShowMembersModal(true)} style={{ cursor: 'pointer' }}>
         <div className="header-info">
           <span className="name">{group.name}</span>
           <span className="members-preview">{Array.isArray(group.members) ? group.members.length : 0} members</span>
         </div>
       </div>
+      
+      <MemberListModal
+        show={showMembersModal}
+        onHide={() => setShowMembersModal(false)}
+        members={group?.members || []}
+      />
 
       <div className="chat-messages-container">
         <div className="chat-messages">

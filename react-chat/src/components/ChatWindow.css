@@ -366,3 +366,80 @@
 }
 .typing-dot:nth-child(2) { animation-delay: 0.2s; }
 .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+.super-block-wrapper {
+  padding: 40px 10px;
+  text-align: center;
+}
+
+.super-block-card {
+  background: var(--bubble-recv);
+  border: 1px solid var(--sidebar-hover);
+  border-radius: 12px;
+  max-width: 360px;
+  margin: auto;
+  padding: 25px;
+  color: var(--sidebar-text);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  animation: fadeIn .2s ease-in-out;
+}
+
+.super-icon-circle {
+  width: 70px;
+  height: 70px;
+  margin: auto;
+  border-radius: 50%;
+  background: var(--sidebar-hover);
+  color: #25D366;
+  font-size: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.super-title {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.super-subtext {
+  font-size: 13px;
+  color: #9fa8a3;
+  margin-bottom: 20px;
+}
+
+.super-info-box {
+  background: var(--sidebar-bg);
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--sidebar-hover);
+  margin-bottom: 15px;
+  text-align: left;
+}
+
+.super-email-btn {
+  background: #25D366;
+  border: none;
+  width: 100%;
+  padding: 10px;
+  border-radius: 999px;
+  color: #000;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.super-email-btn:hover {
+  background: #1ebb5c;
+}
+
+.super-note {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #9fa8a3;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
