@@ -3,20 +3,39 @@ import { Modal } from 'react-bootstrap';
 
 export default function MemberListModal({ show, onHide, members = [], allUsers = [] }) {
 
-  // Map users by ID
+  // Map users by ID (backup lookup)
   const userMap = useMemo(() => {
     const map = {};
     allUsers.forEach(u => {
+      if (!u) return;
       map[u.id] = u;
-      map[u._id] = u; // support mongo style too
+      map[u._id] = u; // Mongo support
     });
     return map;
   }, [allUsers]);
 
-  // Convert members (IDs) → user objects
+  // Build final consistent member objects
   const list = members.map(m => {
-    if (typeof m === "string") return userMap[m] || { id: m }; 
-    return m;
+    if (!m) return {};
+
+    // ✅ New API format (object)
+    if (typeof m === "object" && m.id) {
+      return {
+        id: m.id,
+        name: m.name || m.displayName || m.email || m.id,
+        role: m.role,
+        email: m.email
+      };
+    }
+
+    // ✅ Old format (ID string)
+    const u = userMap[m];
+    return {
+      id: m,
+      name: u?.name || u?.displayName || u?.email || m,
+      email: u?.email,
+      role: u?.role
+    };
   });
 
   return (
@@ -29,7 +48,6 @@ export default function MemberListModal({ show, onHide, members = [], allUsers =
         maxHeight: "80vh",
         overflowY: "auto"
       }}>
-
         <div style={{ fontSize: "18px", fontWeight: "bold", marginBottom: "10px" }}>
           Group Members
         </div>
@@ -54,16 +72,13 @@ export default function MemberListModal({ show, onHide, members = [], allUsers =
               fontWeight: "bold",
               textTransform: "uppercase"
             }}>
-              {(u.displayName || u.name || u.email || u.id)?.[0]}
+              {(u.name || "?")[0]}
             </div>
 
             <div>
-              <div style={{ fontWeight: 500 }}>
-                {u.displayName || u.name || u.email || u.id}
-              </div>
-              <div style={{ fontSize: "12px", opacity: .7 }}>
-                {u.email || ""}
-              </div>
+              <div style={{ fontWeight: 500 }}>{u.name}</div>
+              <div style={{ fontSize: "12px", opacity: .7 }}>{u.email}</div>
+              <div style={{ fontSize: "11px", opacity: .5 }}>{u.role}</div>
             </div>
           </div>
         ))}

@@ -24,20 +24,25 @@ export async function createGroup({ name, members, createdBy }) {
 /**
  * Fetch list of groups visible to current user
  */
-export async function fetchGroups() {
+export async function fetchGroups(currentUserId) {
   try {
     console.log('Fetching groups from API...');
     const res = await apiClient.get('/api/groups');
     console.log('API Response:', res);
-    console.log('Groups data:', res.data);
+    const groups = res.data || [];
 
-    return res.data || [];
+    // ✅ Return only groups where currentUserId exists in `members`
+    const filteredGroups = groups.filter(g =>
+      Array.isArray(g.members) && g.members.includes(currentUserId)
+    );
+
+    return filteredGroups;
   } catch (error) {
     console.error('Error fetching groups:', error);
-    console.error('Error response:', error.response);
     return [];
   }
 }
+
 
 export async function updateGroup(id, updateFields = {}, userId) {
   if (!id) throw new Error('Group id is required');

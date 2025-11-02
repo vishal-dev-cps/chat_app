@@ -13,28 +13,39 @@ export default function GroupList({ groups = [], selected, onSelect, onUpdated, 
     });
     return map;
   }, [users]);
-const [showEdit, setShowEdit] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
 
-const openEdit = (g, e) => {
-  e.stopPropagation(); // prevent select
-  setEditingGroup(g);
-  setShowEdit(true);
-};
+  const visibleGroups = groups.filter(g => {
+    if (!Array.isArray(g.members)) return false;
 
-const handleSave = async (groupId, updateFields) => {
-  await updateGroup(groupId, updateFields, currentUserId);
-  setShowEdit(false);
-  setEditingGroup(null);
-  onUpdated?.();
-};
+    if (typeof g.members[0] === "object") {
+      return g.members.some(m => m.id === currentUserId);
+    }
 
-return (
+    return g.members.includes(currentUserId);
+  });
+
+
+  const openEdit = (g, e) => {
+    e.stopPropagation(); // prevent select
+    setEditingGroup(g);
+    setShowEdit(true);
+  };
+
+  const handleSave = async (groupId, updateFields) => {
+    await updateGroup(groupId, updateFields, currentUserId);
+    setShowEdit(false);
+    setEditingGroup(null);
+    onUpdated?.();
+  };
+
+  return (
     <div className="group-list">
       <div className="group-list-header">Groups</div>
-      {groups.length === 0 && (
+      {visibleGroups.length === 0 && (
         <div className="subtitle-group">No groups yet</div>
       )}
-      {groups.map((g) => (
+      {visibleGroups.map((g) => (
         <div
           key={g.id}
           className={`group-item ${selected?.id === g.id ? 'active' : ''}`}
@@ -61,12 +72,12 @@ return (
                 </span>
               )} */}
               {g.createdBy === currentUserId && (
-              <button
-                className="btn btn-sm btn-link position-absolute top-0 end-0 me-1 mt-1"
-                onClick={(e) => openEdit(g, e)}
-                title="Edit group"
-              >✎</button>
-            )}
+                <button
+                  className="btn btn-sm btn-link position-absolute top-0 end-0 me-1 mt-1"
+                  onClick={(e) => openEdit(g, e)}
+                  title="Edit group"
+                >✎</button>
+              )}
             </div>
           </div>
         </div>

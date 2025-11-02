@@ -98,7 +98,7 @@ export default function App() {
   // Load groups initially and whenever a group is created
   const refreshGroups = async () => {
     try {
-      const g = await fetchGroups();
+      const g = await fetchGroups(currentUserId);
       setGroups(g);
     } catch (err) {
       console.error('Error fetching groups:', err);
