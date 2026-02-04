@@ -1,35 +1,48 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Modal, Button, Form } from 'react-bootstrap';
 import PropTypes from 'prop-types';
 
-/**
- * Modal dialog to create a new chat group.
- * Props:
- *  - show (bool): whether modal is visible
- *  - onHide (func): called to close modal
- *  - onCreate (func): async ({ name, members }) => void, should create group via API
- *  - users (array): list of users to choose from, each { id, displayName }
- */
-export default function CreateGroupModal({ show, onHide, onCreate, users = [], currentUserId }) {
+export default function CreateGroupModal({
+  show,
+  onHide,
+  onCreate,
+  users = [],
+  currentUserId,
+}) {
   const [groupName, setGroupName] = useState('');
-  const [selected, setSelected] = useState(currentUserId ? [currentUserId] : []);
+  const [selected, setSelected] = useState([]);
   const [saving, setSaving] = useState(false);
+
+  // Reset when modal opens
+  useEffect(() => {
+    if (show) {
+      setGroupName('');
+      setSelected([]);
+      setSaving(false);
+    }
+  }, [show]);
 
   const toggleUser = (userId) => {
     setSelected((prev) =>
-      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId]
     );
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const membersSet = new Set([...selected, currentUserId]);
-    if (!groupName.trim() || membersSet.size < 2) return;
+    if (!groupName.trim() || selected.length < 1) return;
+
     try {
       setSaving(true);
-      await onCreate({ name: groupName.trim(), members: Array.from(membersSet), createdBy: currentUserId });
-      setGroupName('');
-      setSelected([]);
+
+      await onCreate({
+        name: groupName.trim(),
+        members: [currentUserId, ...selected],
+        createdBy: currentUserId,
+      });
+
       onHide();
     } catch (err) {
       console.error('Error creating group:', err);
@@ -39,7 +52,7 @@ export default function CreateGroupModal({ show, onHide, onCreate, users = [], c
     }
   };
 
-  const canSave = groupName.trim() && new Set([...selected, currentUserId]).size >= 2 && !saving;
+  const canSave = groupName.trim() && selected.length >= 1 && !saving;
 
   return (
     <Modal show={show} onHide={onHide} centered>
@@ -47,8 +60,9 @@ export default function CreateGroupModal({ show, onHide, onCreate, users = [], c
         <Modal.Header closeButton>
           <Modal.Title>Create Group</Modal.Title>
         </Modal.Header>
+
         <Modal.Body>
-          <Form.Group className="mb-3" controlId="groupName">
+          <Form.Group className="mb-3">
             <Form.Label>Group Name</Form.Label>
             <Form.Control
               type="text"
@@ -58,20 +72,27 @@ export default function CreateGroupModal({ show, onHide, onCreate, users = [], c
               autoFocus
             />
           </Form.Group>
-          <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-            {users.map((u) => (
-              <Form.Check
-                key={u.id}
-                type="checkbox"
-                id={`member-${u.id}`}
-                label={u.displayName || u.name || u.email || u.id}
-                checked={selected.includes(u.id)}
-                onChange={() => toggleUser(u.id)}
-              />
-            ))}
+
+          <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+            {users
+              .filter((u) => u.id !== currentUserId) // 🔥 EXCLUDE SELF
+              .map((u) => (
+                <Form.Check
+                  key={u.id}
+                  type="checkbox"
+                  id={`member-${u.id}`}
+                  label={u.displayName || u.name || u.email || u.id}
+                  checked={selected.includes(u.id)}
+                  onChange={() => toggleUser(u.id)}
+                />
+              ))}
           </div>
-          <small className="text-muted">Select at least two members.</small>
+
+          <small className="text-muted">
+            Select at least one member (you are added automatically).
+          </small>
         </Modal.Body>
+
         <Modal.Footer>
           <Button variant="secondary" onClick={onHide} disabled={saving}>
             Cancel
@@ -86,9 +107,9 @@ export default function CreateGroupModal({ show, onHide, onCreate, users = [], c
 }
 
 CreateGroupModal.propTypes = {
-  show: PropTypes.bool,
-  onHide: PropTypes.func,
-  onCreate: PropTypes.func,
+  show: PropTypes.bool.isRequired,
+  onHide: PropTypes.func.isRequired,
+  onCreate: PropTypes.func.isRequired,
   users: PropTypes.array,
-  currentUserId: PropTypes.string,
+  currentUserId: PropTypes.string.isRequired,
 };

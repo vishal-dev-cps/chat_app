@@ -2,68 +2,82 @@ import { useEffect, useState, useMemo } from 'react';
 import { Modal, Button, Form } from 'react-bootstrap';
 import PropTypes from 'prop-types';
 
-/**
- * Modal dialog to edit an existing chat group (e.g. add/remove members or rename).
- * Props:
- *  - show (bool): whether modal is visible
- *  - onHide (func): called to close modal
- *  - onSave (func): async (groupId, updateFields) => void, performs PATCH via API
- *  - group (object): current group { id, name, members }
- *  - users (array): list of all users { id, displayName }
- *  - currentUserId (string): id of logged in user
- */
-export default function EditGroupModal({ show, onHide, onSave, group, users = [], currentUserId }) {
+export default function EditGroupModal({
+  show,
+  onHide,
+  onSave,
+  group,
+  users = [],
+  currentUserId,
+}) {
   const [name, setName] = useState('');
   const [selected, setSelected] = useState([]);
   const [saving, setSaving] = useState(false);
 
-  // Map of id -> display label
+  // 🔥 Normalize group member IDs (handles object or string)
+  const groupMemberIds = useMemo(() => {
+    if (!Array.isArray(group?.members)) return [];
+    return group.members.map((m) => (typeof m === 'string' ? m : m.id));
+  }, [group]);
+
+  // 🔹 Map userId → display name
   const userMap = useMemo(() => {
     const map = {};
     users.forEach((u) => {
       map[u.id] = u.displayName || u.name || u.email || u.id;
     });
-    // also ensure members present
+
+    // Ensure group members always exist in map
     if (group?.members) {
-      group.members.forEach((id) => {
-        if (!map[id]) map[id] = id;
+      group.members.forEach((m) => {
+        const id = typeof m === 'string' ? m : m.id;
+        if (!map[id]) map[id] = m.name || id;
       });
     }
+
     return map;
   }, [users, group]);
 
-  // build combined list of user objects (existing users array first)
+  // 🔹 Build unified user list
   const allUsers = useMemo(() => {
     const combined = [...users];
-    if (group?.members) {
-      group.members.forEach((id) => {
-        if (!combined.find((u) => u.id === id)) combined.push({ id });
-      });
-    }
-    return combined;
-  }, [users, group]);
 
-  // initialise when modal opens or group changes
+    groupMemberIds.forEach((id) => {
+      if (!combined.find((u) => u.id === id)) {
+        combined.push({ id });
+      }
+    });
+
+    return combined;
+  }, [users, groupMemberIds]);
+
+  // 🔹 Initialize state on open
   useEffect(() => {
     if (group) {
       setName(group.name || '');
-      setSelected(Array.isArray(group.members) ? group.members : []);
+      setSelected(groupMemberIds);
     }
-  }, [group]);
+  }, [group, groupMemberIds]);
 
   const toggleUser = (userId) => {
     setSelected((prev) =>
-      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId]
     );
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const membersSet = new Set(selected);
-    if (!name.trim() || membersSet.size < 2) return;
+
+    if (!name.trim() || selected.length < 2) return;
+
     try {
       setSaving(true);
-      await onSave(group.id, { name: name.trim(), members: Array.from(membersSet) });
+      await onSave(group.id, {
+        name: name.trim(),
+        members: selected, // ✅ SEND IDS ONLY
+      });
       onHide();
     } catch (err) {
       console.error('Error updating group:', err);
@@ -73,7 +87,7 @@ export default function EditGroupModal({ show, onHide, onSave, group, users = []
     }
   };
 
-  const canSave = name.trim() && new Set(selected).size >= 2 && !saving;
+  const canSave = name.trim() && selected.length >= 2 && !saving;
 
   return (
     <Modal show={show} onHide={onHide} centered>
@@ -81,12 +95,12 @@ export default function EditGroupModal({ show, onHide, onSave, group, users = []
         <Modal.Header closeButton>
           <Modal.Title>Edit Group</Modal.Title>
         </Modal.Header>
+
         <Modal.Body>
-          <Form.Group className="mb-3" controlId="groupName">
+          <Form.Group className="mb-3">
             <Form.Label>Group Name</Form.Label>
             <Form.Control
               type="text"
-              placeholder="Enter group name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoFocus
@@ -95,26 +109,30 @@ export default function EditGroupModal({ show, onHide, onSave, group, users = []
 
           {selected.length > 0 && (
             <div className="mb-3 small text-muted">
-              Current members: {selected.map((id) => userMap[id] || id).join(', ')}
+              Current members:{' '}
+              {selected.map((id) => userMap[id]).join(', ')}
             </div>
           )}
-          
 
-          <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+          <div style={{ maxHeight: 300, overflowY: 'auto' }}>
             {allUsers.map((u) => (
               <Form.Check
-                key={u.id}
+                key={u.id} // ✅ STRING ID ONLY
                 type="checkbox"
                 id={`member-${u.id}`}
-                label={u.displayName || u.name || u.email || u.id}
+                label={userMap[u.id]} // ✅ STRING LABEL ONLY
                 checked={selected.includes(u.id)}
                 onChange={() => toggleUser(u.id)}
                 disabled={u.id === currentUserId}
               />
             ))}
           </div>
-          <small className="text-muted">Select at least two members. You cannot remove yourself.</small>
+
+          <small className="text-muted">
+            Select at least two members. You cannot remove yourself.
+          </small>
         </Modal.Body>
+
         <Modal.Footer>
           <Button variant="secondary" onClick={onHide} disabled={saving}>
             Cancel
@@ -129,10 +147,10 @@ export default function EditGroupModal({ show, onHide, onSave, group, users = []
 }
 
 EditGroupModal.propTypes = {
-  show: PropTypes.bool,
-  onHide: PropTypes.func,
-  onSave: PropTypes.func,
+  show: PropTypes.bool.isRequired,
+  onHide: PropTypes.func.isRequired,
+  onSave: PropTypes.func.isRequired,
   group: PropTypes.object,
   users: PropTypes.array,
-  currentUserId: PropTypes.string,
+  currentUserId: PropTypes.string.isRequired,
 };

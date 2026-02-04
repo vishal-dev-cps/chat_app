@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "chat-site-85236",
+    "site": "securityerp",
     "public": "react-chat/dist",
     "ignore": [
       "firebase.json",

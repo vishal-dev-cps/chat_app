@@ -26,17 +26,17 @@ export async function createGroup({ name, members, createdBy }) {
  */
 export async function fetchGroups(currentUserId) {
   try {
-    console.log('Fetching groups from API...');
-    const res = await apiClient.get('/api/groups');
-    console.log('API Response:', res);
-    const groups = res.data || [];
+    const res = await apiClient.get('/api/groups', {
+      params: { userId: currentUserId },
+    });
 
-    // ✅ Return only groups where currentUserId exists in `members`
-    const filteredGroups = groups.filter(g =>
-      Array.isArray(g.members) && g.members.includes(currentUserId)
+    const groups = Array.isArray(res.data?.data) ? res.data.data : [];
+
+    return groups.filter(
+      (g) =>
+        Array.isArray(g.memberIds) &&
+        g.memberIds.includes(currentUserId)
     );
-
-    return filteredGroups;
   } catch (error) {
     console.error('Error fetching groups:', error);
     return [];
@@ -44,11 +44,12 @@ export async function fetchGroups(currentUserId) {
 }
 
 
+
 export async function updateGroup(id, updateFields = {}, userId) {
   if (!id) throw new Error('Group id is required');
   try {
     const payload = userId ? { userId, ...updateFields } : updateFields;
-  const res = await apiClient.patch(`/api/groups/${id}`, payload);
+    const res = await apiClient.patch(`/api/groups/${id}`, payload);
     return res.data;
   } catch (error) {
     console.error('Error updating group:', error);
