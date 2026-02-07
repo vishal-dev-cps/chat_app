@@ -1,12 +1,13 @@
 {
   "scripts": {
     "start": "node server.js",
-    "dev": "concurrently \"node server.js\" \"npm --prefix react-chat run dev\""
+    "dev": "concurrently \"node server.js\" \"npm --prefix react-chat run dev\"",
+    "deploy": "npm --prefix react-chat run build && firebase deploy --only hosting:securityerp"
   },
   "dependencies": {
     "express": "^5.1.0",
     "socket.io": "^4.8.1"
-    },
+  },
   "devDependencies": {
     "concurrently": "^8.2.2"
   }

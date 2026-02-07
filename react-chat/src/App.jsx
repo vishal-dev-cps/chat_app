@@ -493,18 +493,64 @@ export default function App() {
           {sidebarTab === 'chats' ? (
             <UserList
               users={users
-                .filter(u => u.displayName.toLowerCase().includes(search.toLowerCase()))
-                .map(u => ({ ...u, unreadCount: unreadCounts[u.id] || 0 }))}
+                .filter(u =>
+                  u.displayName.toLowerCase().includes(search.toLowerCase())
+                )
+                .map(u => {
+                  const uid = u.userId || u.id;
+
+                  // ✅ CALCULATE UNREAD COUNT FROM MESSAGES (SOURCE OF TRUTH)
+                  const unreadCount = messages.reduce((count, m) => {
+                    if (
+                      m.from === uid &&
+                      m.to === currentUserId &&
+                      m.status !== 'read'
+                    ) {
+                      return count + 1;
+                    }
+                    return count;
+                  }, 0);
+
+                  return {
+                    ...u,
+                    unreadCount,
+                  };
+                })
+                .sort((a, b) => {
+                  // 1️⃣ Unread chats first
+                  if (b.unreadCount !== a.unreadCount) {
+                    return b.unreadCount - a.unreadCount;
+                  }
+
+                  // 2️⃣ Online users
+                  if (a.status === 'online' && b.status !== 'online') return -1;
+                  if (a.status !== 'online' && b.status === 'online') return 1;
+
+                  // 3️⃣ Name fallback
+                  return a.displayName.localeCompare(b.displayName);
+                })}
               selected={selectedUser}
               onSelect={(user) => {
+                const uid = user.userId || user.id;
+
                 setSelectedUser(user);
                 setSelectedGroup(null);
-                setShowMobileChat(true); // Show chat on mobile
-                // mark messages from this user as read
-                setMessages(prev => prev.map(m => (m.from === user.id && m.to === currentUserId ? { ...m, status: 'read' } : m)));
+                setShowMobileChat(true);
+
+                // ✅ Mark messages as read (this will auto-drop chat down)
+                setMessages(prev =>
+                  prev.map(m =>
+                    m.from === uid && m.to === currentUserId
+                      ? { ...m, status: 'read' }
+                      : m
+                  )
+                );
               }}
               messages={messages}
             />
+
+
+
           ) : (
             <GroupList
               groups={groups}
