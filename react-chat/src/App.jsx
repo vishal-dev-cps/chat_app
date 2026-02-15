@@ -7,13 +7,17 @@ import { fetchGroups } from './services/groupService';
 import SidebarHeader from './components/SidebarHeader';
 import { loadUsers } from './services/userService';
 import api from './services/api';
-import { fetchUserStatus, updateUserStatus } from './services/chatService';
-import { fetchChatHistory, saveChatToLocal, updateMessageInHistory } from './services/chatService';
+import { 
+  fetchUserStatus, 
+  updateUserStatus, 
+  saveChatToLocal, 
+  updateMessageInHistory,
+  markMessagesAsRead 
+} from './services/chatService';
 import { requestNotificationPermission, showChatNotification } from './services/notificationService';
 import { socket, connectSocket, disconnectSocket } from './services/socket';
 import ChatWindow from './components/ChatWindow';
 import GroupChatWindow from './components/GroupChatWindow';
-import MessageInput from './components/MessageInput';
 import LoginModal from './components/LoginModal';
 import './App.css';
 
@@ -23,7 +27,14 @@ export default function App() {
   const [currentUserId, setCurrentUserId] = useState(paramId || null);
   const showLogin = !currentUserId;
 
-  // Primary state hooks (declared early to avoid TDZ issues)
+  // Store currentUserId in localStorage for other components
+  useEffect(() => {
+    if (currentUserId) {
+      localStorage.setItem('current_user_id', currentUserId);
+    }
+  }, [currentUserId]);
+
+  // Primary state hooks
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -32,19 +43,16 @@ export default function App() {
   const [userStatuses, setUserStatuses] = useState({});
   const [search, setSearch] = useState('');
   const [groups, setGroups] = useState([]);
-  const [sidebarTab, setSidebarTab] = useState('chats'); // 'chats' | 'groups'
-  const [readStatus, setReadStatus] = useState({});
-  const [showMobileChat, setShowMobileChat] = useState(false); // Mobile navigation state
-  // Register for notifications and handle window focus/blur events
+  const [sidebarTab, setSidebarTab] = useState('chats');
+  const [showMobileChat, setShowMobileChat] = useState(false);
+
+  // Register for notifications
   useEffect(() => {
-    // Request notification permission
     requestNotificationPermission();
 
-    // Track unread count
     let unreadCount = 0;
     const originalTitle = document.title;
 
-    // Update tab title with unread count
     const updateTabTitle = () => {
       if (unreadCount > 0) {
         document.title = `(${unreadCount}) ${originalTitle.replace(/^\(\d+\)\s*/, '')}`;
@@ -53,31 +61,20 @@ export default function App() {
       }
     };
 
-    // Handle window focus
     const handleFocus = () => {
       unreadCount = 0;
       updateTabTitle();
     };
 
-    // Handle window blur (optional: could be used for presence updates)
-    const handleBlur = () => {
-      // Could be used to update user status to 'away' in the future
-    };
-
-    // Listen for new message notifications
     const handleNotification = (message) => {
-      // Only count messages not from the currently selected user
       if (selectedUser?.id !== message.from) {
         unreadCount++;
         updateTabTitle();
       }
     };
 
-    // Add event listeners
     window.addEventListener('focus', handleFocus);
-    window.addEventListener('blur', handleBlur);
 
-    // Listen for custom notification events if needed
     const notificationHandler = (e) => {
       if (e.detail && e.detail.type === 'new_message') {
         handleNotification(e.detail.message);
@@ -85,17 +82,14 @@ export default function App() {
     };
     window.addEventListener('custom-notification', notificationHandler);
 
-    // Cleanup
     return () => {
       window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('blur', handleBlur);
       window.removeEventListener('custom-notification', notificationHandler);
-      document.title = originalTitle; // Restore original title
+      document.title = originalTitle;
     };
   }, [selectedUser]);
 
-  // Connect socket when currentUserId becomes available
-  // Load groups initially and whenever a group is created
+  // Load groups
   const refreshGroups = async () => {
     try {
       const g = await fetchGroups(currentUserId);
@@ -109,33 +103,30 @@ export default function App() {
     refreshGroups();
   }, []);
 
-  // Fetch groups when user switches to Groups tab
   useEffect(() => {
     if (sidebarTab === 'groups') {
       refreshGroups();
     }
   }, [sidebarTab]);
 
+  // Load group messages
   useEffect(() => {
     const loadGroupMessages = async () => {
       if (!selectedGroup) return;
 
-      // Check localStorage first
       const cacheKey = `group_chat_${String(selectedGroup.id)}`;
       const raw = localStorage.getItem(cacheKey);
-      // If any cached value exists and is not an empty array string, trust it and skip fetch
+      
       if (raw && raw !== '[]') {
         try {
           const cached = JSON.parse(raw);
           setGroupMessages(Array.isArray(cached) ? cached : []);
         } catch {
-          // If parsing fails just use empty and fall through to API
           setGroupMessages([]);
         }
         return;
       }
 
-      // Fallback to API fetch
       try {
         const { fetchGroupMessages } = await import('./services/groupMessageService');
         const msgs = await fetchGroupMessages(selectedGroup.id);
@@ -148,75 +139,115 @@ export default function App() {
     loadGroupMessages();
   }, [selectedGroup]);
 
+  // Connect socket
   useEffect(() => {
     if (currentUserId) {
       connectSocket(currentUserId);
 
-      // ===== Socket listeners =====
-      // Incoming chat message
       const onChatMessage = async (msg) => {
-        // Only process if recipient is this user
         if (msg.to !== currentUserId) return;
 
         const newMsg = {
           ...msg,
           status: 'delivered',
-          // Ensure timestamp is a number
           timestamp: msg.timestamp || Date.now()
         };
 
-        // Save to chat history first
+        // Save to localStorage immediately
         await updateMessageInHistory(currentUserId, msg.from, newMsg);
 
-        // Add to messages state
         setMessages(prev => {
-          // Check if message already exists (prevents duplicates)
           if (prev.some(m => m.id === newMsg.id)) {
             return prev;
           }
-          return [...prev, newMsg];
+          const updated = [...prev, newMsg];
+          
+          // Update localStorage with full conversation
+          saveChatToLocal(currentUserId, msg.from, updated.filter(m => 
+            (m.from === msg.from && m.to === currentUserId) ||
+            (m.from === currentUserId && m.to === msg.from)
+          ));
+          
+          return updated;
         });
 
-        // Update read status if this is from the currently selected user
+        // Mark as read if chat is active
         if (selectedUser?.id === msg.from) {
-          newMsg.status = 'read';
-          setReadStatus(prev => ({ ...prev, [msg.from]: Date.now() }));
-          // Update in history as read
-          await updateMessageInHistory(currentUserId, msg.from, { ...newMsg, status: 'read' });
+          const readMsg = { ...newMsg, status: 'read' };
+          await updateMessageInHistory(currentUserId, msg.from, readMsg);
+          await markMessagesAsRead(currentUserId, msg.from);
+          
+          setMessages(prev => {
+            const updated = prev.map(m => (m.id === readMsg.id ? readMsg : m));
+            
+            // Update localStorage
+            saveChatToLocal(currentUserId, msg.from, updated.filter(m => 
+              (m.from === msg.from && m.to === currentUserId) ||
+              (m.from === currentUserId && m.to === msg.from)
+            ));
+            
+            return updated;
+          });
         } else {
-          // Only show notification if not from the currently selected user
           showChatNotification(newMsg, users);
         }
       };
 
+      // Listen for message deletions
+      const onMessageDeleted = async (data) => {
+        console.log('[APP] Message deletion received:', data);
+        
+        if (data.userId1 === currentUserId || data.userId2 === currentUserId) {
+          setMessages(prev => {
+            const updated = prev.map(msg =>
+              msg.id === data.messageId
+                ? { 
+                    ...msg, 
+                    isDeleted: true, 
+                    text: '', 
+                    attachments: [],
+                    deletedAt: Date.now()
+                  }
+                : msg
+            );
+            
+            // Update localStorage
+            const otherUserId = data.userId1 === currentUserId ? data.userId2 : data.userId1;
+            const conversationMessages = updated.filter(m => 
+              (m.from === otherUserId && m.to === currentUserId) ||
+              (m.from === currentUserId && m.to === otherUserId)
+            );
+            
+            saveChatToLocal(currentUserId, otherUserId, conversationMessages);
+            
+            return updated;
+          });
+        }
+      };
+
       socket.on('chat_message', onChatMessage);
+      socket.on('message-deleted', onMessageDeleted);
 
       return () => {
         socket.off('chat_message', onChatMessage);
+        socket.off('message-deleted', onMessageDeleted);
         disconnectSocket();
       };
     }
   }, [currentUserId, selectedUser, users]);
 
-
-
-
-  // load users on mount
+  // Load users
   useEffect(() => {
     (async () => {
       if (!currentUserId) return;
 
       try {
-        // Fetch current user details from API
         const response = await api.get(`/api/chat/user/${currentUserId}`);
         if (response.data?.success) {
           const currentUser = response.data.user;
-          console.log('[App] Current user:', currentUser);
           const fetched = await loadUsers(currentUser);
           setUsers(fetched);
-          // Removed automatic selection of first user
 
-          // update my status to online
           updateUserStatus({ userId: currentUserId, status: 'online' }).catch(console.error);
         } else {
           console.error('Failed to fetch user details:', response.data);
@@ -227,75 +258,21 @@ export default function App() {
     })();
   }, [currentUserId]);
 
-
-
-  // Load chat history when a user is selected
+  // Mark messages as read when user is selected
   useEffect(() => {
-    const loadChat = async () => {
-      if (selectedUser && currentUserId) {
-        try {
-          const chatHistory = await fetchChatHistory(currentUserId, selectedUser.id);
-
-          // Mark messages as read and update state
-          const updatedMessages = chatHistory.map(msg => ({
-            ...msg,
-            status: msg.from === selectedUser.id && msg.to === currentUserId ? 'read' : msg.status
-          }));
-
-          // Sort messages by timestamp
-          updatedMessages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-
-          // Update messages state
-          setMessages(updatedMessages);
-
-          // Update read status for the current chat
-          if (selectedUser) {
-            setReadStatus(prev => ({
-              ...prev,
-              [selectedUser.id]: Date.now()
-            }));
-
-            // Mark messages as read in history
-            const unreadMessages = updatedMessages.filter(
-              msg => msg.from === selectedUser.id &&
-                msg.to === currentUserId &&
-                msg.status !== 'read'
-            );
-
-            if (unreadMessages.length > 0) {
-              const readUpdates = unreadMessages.map(msg => ({
-                ...msg,
-                status: 'read'
-              }));
-
-              // Update all unread messages as read in history
-              await Promise.all(
-                readUpdates.map(msg =>
-                  updateMessageInHistory(currentUserId, selectedUser.id, msg)
-                )
-              );
-
-              // Update local state
-              setMessages(prev =>
-                prev.map(msg =>
-                  msg.from === selectedUser.id && msg.to === currentUserId && msg.status !== 'read'
-                    ? { ...msg, status: 'read' }
-                    : msg
-                )
-              );
-            }
-          }
-
-        } catch (error) {
-          console.error('Error loading chat history:', error);
-        }
-      }
-    };
-
-    loadChat();
+    if (selectedUser && currentUserId) {
+      markMessagesAsRead(currentUserId, selectedUser.id).then(updatedMessages => {
+        setMessages(prev =>
+          prev.map(msg => {
+            const updated = updatedMessages.find(m => m.id === msg.id);
+            return updated || msg;
+          })
+        );
+      });
+    }
   }, [selectedUser, currentUserId]);
 
-  // Fetch status for all users after list loads
+  // Fetch user statuses
   useEffect(() => {
     if (!users.length) return;
     (async () => {
@@ -309,7 +286,7 @@ export default function App() {
     })();
   }, [users]);
 
-  // Inactivity timer – 5 min sets offline
+  // Inactivity timer
   useEffect(() => {
     if (!currentUserId) return;
     let inactivityTimer;
@@ -317,24 +294,24 @@ export default function App() {
       clearTimeout(inactivityTimer);
       inactivityTimer = setTimeout(() => {
         updateUserStatus({ userId: currentUserId, status: 'offline' }).catch(console.error);
-      }, 1 * 60 * 1000);
+      }, 5 * 60 * 1000);
     };
-    // list of events indicating activity
+    
     const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
     events.forEach(ev => window.addEventListener(ev, resetTimer));
-    resetTimer(); // start timer
+    resetTimer();
+    
     return () => {
       clearTimeout(inactivityTimer);
       events.forEach(ev => window.removeEventListener(ev, resetTimer));
     };
   }, [currentUserId]);
 
-  // Handle beforeunload -> set offline
+  // Handle beforeunload
   useEffect(() => {
     if (!currentUserId) return;
     const handler = () => {
       navigator.sendBeacon && navigator.sendBeacon(
-        //`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/chat/user/status`,
         `${import.meta.env.VITE_API_URL || 'https://us-central1-securityerp.cloudfunctions.net'}/api/chat/user/status`,
         JSON.stringify({ userId: currentUserId, status: 'offline' })
       );
@@ -343,28 +320,20 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [currentUserId]);
 
-  // Listen for messages via localStorage events (cross-tab sync)
+  // Listen for cross-tab messages
   useEffect(() => {
     function handleStorage(e) {
       if (e.key === 'chat_message' && e.newValue) {
         const msg = JSON.parse(e.newValue);
-        // Only process if message is for current user
         if (msg.id && msg.to === currentUserId && msg.from !== currentUserId) {
-          // Set initial status as 'delivered' for received messages
           const newMsg = { ...msg, status: 'delivered' };
 
-          // If this chat is active, mark as read immediately
           if (selectedUser?.id === msg.from) {
             newMsg.status = 'read';
-            setReadStatus(prev => ({
-              ...prev,
-              [msg.from]: Date.now()
-            }));
           }
 
           setMessages(prev => [...prev, newMsg]);
 
-          // If chat is not active, show notification
           if (selectedUser?.id !== msg.from) {
             showChatNotification({ ...msg, from: msg.from, text: msg.text, id: msg.id }, users);
           }
@@ -376,25 +345,7 @@ export default function App() {
     return () => window.removeEventListener('storage', handleStorage);
   }, [currentUserId, selectedUser]);
 
-  // Calculate unread counts for each user
-  const unreadCounts = useMemo(() => {
-    const counts = {};
-    messages.forEach(msg => {
-      if (msg.to === currentUserId && msg.status !== 'read') {
-        counts[msg.from] = (counts[msg.from] || 0) + 1;
-      }
-    });
-    return counts;
-  }, [messages, currentUserId]);
-
-  const updateMessageStatus = (messageId, status) => {
-    setMessages(prev =>
-      prev.map(msg =>
-        msg.id === messageId ? { ...msg, status } : msg
-      )
-    );
-  };
-
+  // Send message
   const sendMessage = async (payload) => {
     const text = (typeof payload === 'string')
       ? payload
@@ -414,50 +365,78 @@ export default function App() {
       text,
       attachments,
       timestamp,
-      status: 'sending' // initial status
+      status: 'sending'
     };
 
-    // Save to local history immediately
-    updateMessageInHistory(currentUserId, selectedUser.id, newMsg);
+    // Save to localStorage immediately
+    await updateMessageInHistory(currentUserId, selectedUser.id, newMsg);
 
-    // Update local state
-    setMessages(prev => [...prev, newMsg]);
+    setMessages(prev => {
+      const updated = [...prev, newMsg];
+      
+      // Update localStorage with full conversation
+      saveChatToLocal(currentUserId, selectedUser.id, updated.filter(m => 
+        (m.from === selectedUser.id && m.to === currentUserId) ||
+        (m.from === currentUserId && m.to === selectedUser.id)
+      ));
+      
+      return updated;
+    });
 
-    // Simulate message delivery
+    // Update status to delivered
     setTimeout(async () => {
       const deliveredMsg = { ...newMsg, status: 'delivered' };
-      updateMessageStatus(messageId, 'delivered');
+      setMessages(prev => {
+        const updated = prev.map(m => (m.id === messageId ? deliveredMsg : m));
+        
+        // Update localStorage
+        saveChatToLocal(currentUserId, selectedUser.id, updated.filter(m => 
+          (m.from === selectedUser.id && m.to === currentUserId) ||
+          (m.from === currentUserId && m.to === selectedUser.id)
+        ));
+        
+        return updated;
+      });
       await updateMessageInHistory(currentUserId, selectedUser.id, deliveredMsg);
 
-      // In a real app, this would be triggered by the recipient's client
+      // Simulate read status
       if (selectedUser) {
         setTimeout(async () => {
           if (selectedUser) {
             const readMsg = { ...deliveredMsg, status: 'read' };
-            updateMessageStatus(messageId, 'read');
+            setMessages(prev => {
+              const updated = prev.map(m => (m.id === messageId ? readMsg : m));
+              
+              // Update localStorage
+              saveChatToLocal(currentUserId, selectedUser.id, updated.filter(m => 
+                (m.from === selectedUser.id && m.to === currentUserId) ||
+                (m.from === currentUserId && m.to === selectedUser.id)
+              ));
+              
+              return updated;
+            });
             await updateMessageInHistory(currentUserId, selectedUser.id, readMsg);
           }
         }, 1000);
       }
     }, 500);
 
-    // Emit over socket to backend so other browsers/clients can receive
     socket.emit('chat_message', newMsg);
 
-    // Handle incoming group_message
+    // Handle group messages
     const onGroupMessage = (msg) => {
       if (msg.groupId !== selectedGroup?.id) return;
       setGroupMessages((prev) => [...prev, msg]);
     };
     socket.on('group_message', onGroupMessage);
-
   };
 
-  // ===== Group Chat Send =====
+  // Send group message
   const sendGroupMessage = async (text, attachments = []) => {
     text = typeof text === 'string' ? text : '';
     if (!selectedGroup) return;
     if (text.trim() === '' && attachments.length === 0) return;
+    
     const { sendGroupMessage: sendGroupMsgApi } = await import('./services/groupMessageService');
     const payload = {
       senderId: currentUserId,
@@ -465,8 +444,8 @@ export default function App() {
       attachments,
       timestamp: new Date().toISOString(),
     };
+    
     const msg = await sendGroupMsgApi(selectedGroup.id, payload);
-    // Optimistic update
     setGroupMessages((prev) => [...prev, msg]);
     socket.emit('group_message', { groupId: selectedGroup.id, ...msg });
   };
@@ -480,8 +459,18 @@ export default function App() {
       <div className="app-wrapper">
         <div className={`sidebar ${showMobileChat ? 'mobile-hidden' : ''}`}>
           <div className="sidebar-tabs d-flex">
-            <button className={`flex-fill btn btn-sm ${sidebarTab === 'chats' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setSidebarTab('chats')}>Chats</button>
-            <button className={`flex-fill btn btn-sm ${sidebarTab === 'groups' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setSidebarTab('groups')}>Groups</button>
+            <button 
+              className={`flex-fill btn btn-sm ${sidebarTab === 'chats' ? 'btn-primary' : 'btn-outline-secondary'}`} 
+              onClick={() => setSidebarTab('chats')}
+            >
+              Chats
+            </button>
+            <button 
+              className={`flex-fill btn btn-sm ${sidebarTab === 'groups' ? 'btn-primary' : 'btn-outline-secondary'}`} 
+              onClick={() => setSidebarTab('groups')}
+            >
+              Groups
+            </button>
           </div>
           <SidebarHeader
             users={users}
@@ -492,65 +481,17 @@ export default function App() {
           />
           {sidebarTab === 'chats' ? (
             <UserList
-              users={users
-                .filter(u =>
-                  u.displayName.toLowerCase().includes(search.toLowerCase())
-                )
-                .map(u => {
-                  const uid = u.userId || u.id;
-
-                  // ✅ CALCULATE UNREAD COUNT FROM MESSAGES (SOURCE OF TRUTH)
-                  const unreadCount = messages.reduce((count, m) => {
-                    if (
-                      m.from === uid &&
-                      m.to === currentUserId &&
-                      m.status !== 'read'
-                    ) {
-                      return count + 1;
-                    }
-                    return count;
-                  }, 0);
-
-                  return {
-                    ...u,
-                    unreadCount,
-                  };
-                })
-                .sort((a, b) => {
-                  // 1️⃣ Unread chats first
-                  if (b.unreadCount !== a.unreadCount) {
-                    return b.unreadCount - a.unreadCount;
-                  }
-
-                  // 2️⃣ Online users
-                  if (a.status === 'online' && b.status !== 'online') return -1;
-                  if (a.status !== 'online' && b.status === 'online') return 1;
-
-                  // 3️⃣ Name fallback
-                  return a.displayName.localeCompare(b.displayName);
-                })}
+              users={users.filter(u =>
+                u.displayName.toLowerCase().includes(search.toLowerCase())
+              )}
               selected={selectedUser}
               onSelect={(user) => {
-                const uid = user.userId || user.id;
-
                 setSelectedUser(user);
                 setSelectedGroup(null);
                 setShowMobileChat(true);
-
-                // ✅ Mark messages as read (this will auto-drop chat down)
-                setMessages(prev =>
-                  prev.map(m =>
-                    m.from === uid && m.to === currentUserId
-                      ? { ...m, status: 'read' }
-                      : m
-                  )
-                );
               }}
               messages={messages}
             />
-
-
-
           ) : (
             <GroupList
               groups={groups}
@@ -560,7 +501,7 @@ export default function App() {
               onSelect={(g) => {
                 setSelectedGroup(g);
                 setSelectedUser(null);
-                setShowMobileChat(true); // Show chat on mobile
+                setShowMobileChat(true);
               }}
               onUpdated={refreshGroups}
             />
@@ -582,6 +523,7 @@ export default function App() {
               currentUserId={currentUserId}
               onSend={sendMessage}
               onBack={() => setShowMobileChat(false)}
+              setMessages={setMessages}
             />
           )}
         </div>

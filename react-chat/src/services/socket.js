@@ -9,6 +9,7 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://chat-backend-1740
 // Single shared socket instance
 export const socket = io(SOCKET_URL, {
   autoConnect: false, // we will connect manually once we have the userId
+  transports: ['websocket'],
   reconnection: true,
   reconnectionAttempts: 5,
   reconnectionDelay: 1000,

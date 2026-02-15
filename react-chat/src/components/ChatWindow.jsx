@@ -1,5 +1,5 @@
 import { useEffect, useRef, useMemo, useCallback, useState } from 'react';
-import { fetchUserStatus } from '../services/chatService';
+import { fetchUserStatus, markMessagesAsRead } from '../services/chatService';
 import './ChatWindow.css';
 import MessageStatus from './MessageStatus';
 import MessageInput from './MessageInput';
@@ -8,8 +8,10 @@ import { backupMessages } from '../services/backupService';
 import { format } from 'date-fns';
 import { socket, connectSocket } from '../services/socket';
 
-export default function ChatWindow({ messages, selectedUser, currentUserId, onSend, onBack }) {
+export default function ChatWindow({ messages, selectedUser, currentUserId, onSend, onBack, setMessages }) {
   const [hoveredMessage, setHoveredMessage] = useState(null);
+  const [localMessages, setLocalMessages] = useState([]);
+  
   const handleBackup = async () => {
     try {
       const msgs = getChatFromLocal(currentUserId, selectedUser.id) || [];
@@ -52,11 +54,49 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
     messagesEndRef.current?.scrollIntoView({ behavior });
   }, []);
 
+  // Load messages when user is selected
+  useEffect(() => {
+    if (selectedUser && currentUserId) {
+      const loadMessages = async () => {
+        const history = await fetchChatHistory(currentUserId, selectedUser.id);
+        setLocalMessages(history);
+        
+        // Mark messages as read
+        await markMessagesAsRead(currentUserId, selectedUser.id);
+      };
+      loadMessages();
+    }
+  }, [selectedUser, currentUserId]);
+
+  // Sync with parent messages prop
+  useEffect(() => {
+    if (selectedUser && messages) {
+      const filtered = messages.filter(m =>
+        (m.from === selectedUser.id && m.to === currentUserId) ||
+        (m.to === selectedUser.id && m.from === currentUserId)
+      );
+      
+      // Merge with local messages (avoid duplicates)
+      const merged = [...localMessages];
+      filtered.forEach(msg => {
+        if (!merged.find(m => m.id === msg.id)) {
+          merged.push(msg);
+        }
+      });
+      
+      merged.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      setLocalMessages(merged);
+      
+      // Save to localStorage
+      saveChatToLocal(currentUserId, selectedUser.id, merged);
+    }
+  }, [messages, selectedUser]);
+
   useEffect(() => {
     if (selectedUser) {
       scrollToBottom('auto');
     }
-  }, [messages, scrollToBottom, selectedUser]);
+  }, [localMessages, scrollToBottom, selectedUser]);
 
   const [usercurrentstatus, setUsercurrentstatus] = useState({ isOnline: false, isTyping: false, lastSeen: null });
 
@@ -91,9 +131,11 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
     const addListeners = () => {
       activeSocket.off('user-status-update', handleStatusUpdate);
       activeSocket.off('typing-private', handleTypingPrivate);
+      activeSocket.off('message-deleted', handleMessageDeleted);
       activeSocket.on('user-status-update', handleStatusUpdate);
       activeSocket.on('typing-private', handleTypingPrivate);
       activeSocket.on('user-typing', handleTypingPrivate);
+      activeSocket.on('message-deleted', handleMessageDeleted);
     };
 
     addListeners();
@@ -114,13 +156,79 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
         clearTimeout(typingTimeout);
         typingTimeout = setTimeout(() => {
           setUsercurrentstatus(prev => ({ ...prev, isTyping: false }));
-        }, 2000);
+        }, 3000);
+      }
+    }
+
+    function handleMessageDeleted(data) {
+      console.log('[ChatWindow] Received message-deleted event:', data);
+      console.log('[ChatWindow] Current user:', currentUserId);
+      console.log('[ChatWindow] Selected user:', selectedUser?.id);
+      
+      // Check if this message deletion affects the current conversation
+      const isRelevant = 
+        (data.userId1 === currentUserId || data.userId2 === currentUserId) &&
+        (data.userId1 === selectedUser?.id || data.userId2 === selectedUser?.id);
+      
+      console.log('[ChatWindow] Is relevant:', isRelevant);
+        
+      if (isRelevant) {
+        console.log('[ChatWindow] Updating message as deleted:', data.messageId);
+        
+        // Update local messages state
+        setLocalMessages(prev => {
+          const updated = prev.map(msg =>
+            msg.id === data.messageId
+              ? { 
+                  ...msg, 
+                  isDeleted: true, 
+                  text: '', 
+                  attachments: [],
+                  deletedAt: Date.now() 
+                }
+              : msg
+          );
+          console.log('[ChatWindow] Local messages updated:', updated);
+          return updated;
+        });
+        
+        // Also update parent messages state if available
+        if (setMessages) {
+          setMessages(prev => prev.map(msg =>
+            msg.id === data.messageId
+              ? { 
+                  ...msg, 
+                  isDeleted: true, 
+                  text: '', 
+                  attachments: [],
+                  deletedAt: Date.now() 
+                }
+              : msg
+          ));
+        }
+        
+        // Update localStorage
+        const currentMessages = getChatFromLocal(currentUserId, selectedUser.id);
+        const updatedMessages = currentMessages.map(msg =>
+          msg.id === data.messageId
+            ? { 
+                ...msg, 
+                isDeleted: true, 
+                text: '', 
+                attachments: [],
+                deletedAt: Date.now() 
+              }
+            : msg
+        );
+        saveChatToLocal(currentUserId, selectedUser.id, updatedMessages);
+        console.log('[ChatWindow] localStorage updated');
       }
     }
 
     return () => {
       activeSocket.off('user-status-update', handleStatusUpdate);
       activeSocket.off('typing-private', handleTypingPrivate);
+      activeSocket.off('message-deleted', handleMessageDeleted);
       activeSocket.offAny?.();
       clearTimeout(typingTimeout);
     };
@@ -129,7 +237,7 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
   const isTyping = usercurrentstatus.isTyping;
   const isOnline = usercurrentstatus.isOnline;
   const statusText = isTyping
-    ? 'Typing...'
+    ? 'typing...'
     : isOnline
       ? 'Online'
       : usercurrentstatus.lastSeen
@@ -137,26 +245,62 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
         : 'Offline';
   const statusClass = isTyping ? 'typing' : isOnline ? 'online' : 'offline';
 
-  const filteredMessages = useMemo(() => {
-    if (!selectedUser || !Array.isArray(messages)) return [];
-    return messages
-      .filter(msg =>
-        (msg.from === selectedUser?.id && msg.to === currentUserId) ||
-        (msg.to === selectedUser?.id && msg.from === currentUserId)
-      )
-      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  }, [messages, selectedUser, currentUserId]);
-
   const handleDeleteMessage = async (message) => {
-    if (window.confirm('Are you sure you want to delete this message?')) {
+    if (window.confirm('Delete this message for everyone?')) {
       try {
+        const deletedMsg = { 
+          ...message, 
+          isDeleted: true, 
+          text: '', 
+          attachments: [],
+          deletedAt: Date.now()
+        };
+        
+        // Update local state immediately for instant feedback
+        setLocalMessages(prev => prev.map(msg =>
+          msg.id === message.id ? deletedMsg : msg
+        ));
+        
+        // Update parent messages state
+        if (setMessages) {
+          setMessages(prev => prev.map(msg =>
+            msg.id === message.id ? deletedMsg : msg
+          ));
+        }
+        
+        // Update localStorage immediately
+        const updatedMessages = getChatFromLocal(currentUserId, selectedUser.id).map(msg =>
+          msg.id === message.id ? deletedMsg : msg
+        );
+        saveChatToLocal(currentUserId, selectedUser.id, updatedMessages);
+        
+        // Perform soft delete in service
         const success = await softDeleteMessage(currentUserId, selectedUser.id, message.id);
+        
         if (success) {
-          const updatedMessages = await fetchChatHistory(currentUserId, selectedUser.id);
-          setMessages(updatedMessages);
+          // Emit socket event for real-time update to other user
+          const deleteEvent = {
+            messageId: message.id,
+            userId1: currentUserId,
+            userId2: selectedUser.id
+          };
+          
+          console.log('[DELETE] Emitting delete-message event:', deleteEvent);
+          console.log('[DELETE] Socket connected:', socket.connected);
+          console.log('[DELETE] Socket ID:', socket.id);
+          
+          socket.emit('delete-message', deleteEvent);
+          
+          console.log('[DELETE] Message deleted successfully:', message.id);
+        } else {
+          console.error('[DELETE] Soft delete failed, but UI already updated');
         }
       } catch (error) {
         console.error('Error deleting message:', error);
+        // Revert the UI change on error
+        const revertedMessages = getChatFromLocal(currentUserId, selectedUser.id);
+        setLocalMessages(revertedMessages);
+        alert('Failed to delete message');
       }
     }
   };
@@ -193,6 +337,7 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
         <img
           src={selectedUser.photoURL}
           alt={selectedUser.displayName}
+          className="header-avatar"
           onError={(e) => {
             const initials = (selectedUser.displayName || 'U').split(' ').slice(0, 2).map(s => s[0].toUpperCase()).join('');
             e.target.onerror = null;
@@ -201,14 +346,18 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
         />
         <div className="header-info">
           <span className="name">{selectedUser.displayName}</span>
-          <span className={`status ${statusClass}`}>{statusText}</span>
+          <span className={`status ${statusClass}`}>
+            {isTyping && <span className="typing-dots">
+              <span>.</span><span>.</span><span>.</span>
+            </span>}
+            {statusText}
+          </span>
         </div>
         <button className="btn-delete" onClick={handleDeleteChat}><i className="fas fa-trash"></i></button>
       </div>
 
       {isSuperAdmin ? (
         <div className="super-block-wrapper">
-
           <div className="super-block-card">
             <div className="super-icon-circle">
               <i className="fas fa-shield-alt"></i>
@@ -232,14 +381,13 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
               Chat disabled — please reach out via email.
             </p>
           </div>
-
         </div>
       ) : (
         <>
           {/* ✅ NORMAL CHAT UI */}
           <div className="chat-messages-container" ref={messagesContainerRef}>
             <div className="chat-messages">
-              {filteredMessages.length === 0 ? (
+              {localMessages.length === 0 ? (
                 <div className="empty-chat-state">
                   <div className="empty-chat-content">
                     <h5>No messages yet</h5>
@@ -247,50 +395,65 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
                   </div>
                 </div>
               ) : (
-                filteredMessages.map((m, i) => {
+                localMessages.map((m, i) => {
                   const isSent = m.from === currentUserId;
+                  const isDeleted = m.isDeleted;
+                  
                   return (
                     <div
-                      key={i}
+                      key={m.id || i}
                       className={`message-wrapper ${isSent ? 'sent' : 'received'}`}
-                      onMouseEnter={() => setHoveredMessage(m.id)}
+                      onMouseEnter={() => !isDeleted && setHoveredMessage(m.id)}
                       onMouseLeave={() => setHoveredMessage(null)}
                     >
                       <div className={`message-content ${isSent ? 'sent' : 'received'}`}>
-                        <div className="message-actions">
-                          {isSent && hoveredMessage === m.id && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteMessage(m);
-                              }}
-                              className="message-action-btn"
-                              title="Delete message"
-                            >
-                              <i className="fas fa-trash-alt"></i>
-                            </button>
-                          )}
-                        </div>
-                        <div className={`msg-bubble ${isSent ? 'sent' : 'received'}`}>
-                          {m.attachments && m.attachments.length > 0 && (
-                            <div className="msg-attachments">
-                              {m.attachments.map(att => (
-                                att.type?.startsWith('image/') ? (
-                                  <img key={att.url} src={att.url} alt={att.name} className="chat-img" />
-                                ) : (
-                                  <a key={att.url} href={att.url} target="_blank" rel="noreferrer" className="file-link">
-                                    {att.name}
-                                  </a>
-                                )
-                              ))}
+                        {!isDeleted && (
+                          <div className="message-actions">
+                            {isSent && hoveredMessage === m.id && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteMessage(m);
+                                }}
+                                className="message-action-btn"
+                                title="Delete message"
+                              >
+                                <i className="fas fa-trash-alt"></i>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        
+                        <div className={`msg-bubble ${isSent ? 'sent' : 'received'} ${isDeleted ? 'deleted' : ''}`}>
+                          {isDeleted ? (
+                            <div className="deleted-message">
+                              <i className="fas fa-ban"></i>
+                              <span className="deleted-text">This message was deleted</span>
                             </div>
+                          ) : (
+                            <>
+                              {m.attachments && m.attachments.length > 0 && (
+                                <div className="msg-attachments">
+                                  {m.attachments.map((att, idx) => (
+                                    att.type?.startsWith('image/') ? (
+                                      <img key={idx} src={att.url} alt={att.name} className="chat-img" />
+                                    ) : (
+                                      <a key={idx} href={att.url} target="_blank" rel="noreferrer" className="file-link">
+                                        <i className="fas fa-file"></i> {att.name}
+                                      </a>
+                                    )
+                                  ))}
+                                </div>
+                              )}
+                              {m.text && (
+                                <span className="msg-text">{m.text}</span>
+                              )}
+                            </>
                           )}
-                          {m.text && (
-                            <span className="msg-text">{m.text}</span>
-                          )}
+                          
                           <span className="message-time">
                             {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            {isSent && (
+                            {isSent && !isDeleted && (
                               <span className="message-status">
                                 {m.status === 'read' ? (
                                   <i className="fas fa-check-double text-primary"></i>
@@ -310,9 +473,11 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
               )}
               {isTyping && (
                 <div className="typing-indicator">
-                  <span className="typing-dot">•</span>
-                  <span className="typing-dot">•</span>
-                  <span className="typing-dot">•</span>
+                  <div className="typing-bubble">
+                    <span className="typing-dot"></span>
+                    <span className="typing-dot"></span>
+                    <span className="typing-dot"></span>
+                  </div>
                 </div>
               )}
               <div ref={messagesEndRef} />
