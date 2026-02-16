@@ -7,12 +7,12 @@ import { fetchGroups } from './services/groupService';
 import SidebarHeader from './components/SidebarHeader';
 import { loadUsers } from './services/userService';
 import api from './services/api';
-import { 
-  fetchUserStatus, 
-  updateUserStatus, 
-  saveChatToLocal, 
+import {
+  fetchUserStatus,
+  updateUserStatus,
+  saveChatToLocal,
   updateMessageInHistory,
-  markMessagesAsRead 
+  markMessagesAsRead
 } from './services/chatService';
 import { requestNotificationPermission, showChatNotification } from './services/notificationService';
 import { socket, connectSocket, disconnectSocket } from './services/socket';
@@ -116,7 +116,7 @@ export default function App() {
 
       const cacheKey = `group_chat_${String(selectedGroup.id)}`;
       const raw = localStorage.getItem(cacheKey);
-      
+
       if (raw && raw !== '[]') {
         try {
           const cached = JSON.parse(raw);
@@ -161,13 +161,13 @@ export default function App() {
             return prev;
           }
           const updated = [...prev, newMsg];
-          
+
           // Update localStorage with full conversation
-          saveChatToLocal(currentUserId, msg.from, updated.filter(m => 
+          saveChatToLocal(currentUserId, msg.from, updated.filter(m =>
             (m.from === msg.from && m.to === currentUserId) ||
             (m.from === currentUserId && m.to === msg.from)
           ));
-          
+
           return updated;
         });
 
@@ -176,16 +176,16 @@ export default function App() {
           const readMsg = { ...newMsg, status: 'read' };
           await updateMessageInHistory(currentUserId, msg.from, readMsg);
           await markMessagesAsRead(currentUserId, msg.from);
-          
+
           setMessages(prev => {
             const updated = prev.map(m => (m.id === readMsg.id ? readMsg : m));
-            
+
             // Update localStorage
-            saveChatToLocal(currentUserId, msg.from, updated.filter(m => 
+            saveChatToLocal(currentUserId, msg.from, updated.filter(m =>
               (m.from === msg.from && m.to === currentUserId) ||
               (m.from === currentUserId && m.to === msg.from)
             ));
-            
+
             return updated;
           });
         } else {
@@ -196,30 +196,30 @@ export default function App() {
       // Listen for message deletions
       const onMessageDeleted = async (data) => {
         console.log('[APP] Message deletion received:', data);
-        
+
         if (data.userId1 === currentUserId || data.userId2 === currentUserId) {
           setMessages(prev => {
             const updated = prev.map(msg =>
               msg.id === data.messageId
-                ? { 
-                    ...msg, 
-                    isDeleted: true, 
-                    text: '', 
-                    attachments: [],
-                    deletedAt: Date.now()
-                  }
+                ? {
+                  ...msg,
+                  isDeleted: true,
+                  text: '',
+                  attachments: [],
+                  deletedAt: Date.now()
+                }
                 : msg
             );
-            
+
             // Update localStorage
             const otherUserId = data.userId1 === currentUserId ? data.userId2 : data.userId1;
-            const conversationMessages = updated.filter(m => 
+            const conversationMessages = updated.filter(m =>
               (m.from === otherUserId && m.to === currentUserId) ||
               (m.from === currentUserId && m.to === otherUserId)
             );
-            
+
             saveChatToLocal(currentUserId, otherUserId, conversationMessages);
-            
+
             return updated;
           });
         }
@@ -296,11 +296,11 @@ export default function App() {
         updateUserStatus({ userId: currentUserId, status: 'offline' }).catch(console.error);
       }, 5 * 60 * 1000);
     };
-    
+
     const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
     events.forEach(ev => window.addEventListener(ev, resetTimer));
     resetTimer();
-    
+
     return () => {
       clearTimeout(inactivityTimer);
       events.forEach(ev => window.removeEventListener(ev, resetTimer));
@@ -373,13 +373,13 @@ export default function App() {
 
     setMessages(prev => {
       const updated = [...prev, newMsg];
-      
+
       // Update localStorage with full conversation
-      saveChatToLocal(currentUserId, selectedUser.id, updated.filter(m => 
+      saveChatToLocal(currentUserId, selectedUser.id, updated.filter(m =>
         (m.from === selectedUser.id && m.to === currentUserId) ||
         (m.from === currentUserId && m.to === selectedUser.id)
       ));
-      
+
       return updated;
     });
 
@@ -388,13 +388,13 @@ export default function App() {
       const deliveredMsg = { ...newMsg, status: 'delivered' };
       setMessages(prev => {
         const updated = prev.map(m => (m.id === messageId ? deliveredMsg : m));
-        
+
         // Update localStorage
-        saveChatToLocal(currentUserId, selectedUser.id, updated.filter(m => 
+        saveChatToLocal(currentUserId, selectedUser.id, updated.filter(m =>
           (m.from === selectedUser.id && m.to === currentUserId) ||
           (m.from === currentUserId && m.to === selectedUser.id)
         ));
-        
+
         return updated;
       });
       await updateMessageInHistory(currentUserId, selectedUser.id, deliveredMsg);
@@ -406,13 +406,13 @@ export default function App() {
             const readMsg = { ...deliveredMsg, status: 'read' };
             setMessages(prev => {
               const updated = prev.map(m => (m.id === messageId ? readMsg : m));
-              
+
               // Update localStorage
-              saveChatToLocal(currentUserId, selectedUser.id, updated.filter(m => 
+              saveChatToLocal(currentUserId, selectedUser.id, updated.filter(m =>
                 (m.from === selectedUser.id && m.to === currentUserId) ||
                 (m.from === currentUserId && m.to === selectedUser.id)
               ));
-              
+
               return updated;
             });
             await updateMessageInHistory(currentUserId, selectedUser.id, readMsg);
@@ -436,7 +436,7 @@ export default function App() {
     text = typeof text === 'string' ? text : '';
     if (!selectedGroup) return;
     if (text.trim() === '' && attachments.length === 0) return;
-    
+
     const { sendGroupMessage: sendGroupMsgApi } = await import('./services/groupMessageService');
     const payload = {
       senderId: currentUserId,
@@ -444,7 +444,7 @@ export default function App() {
       attachments,
       timestamp: new Date().toISOString(),
     };
-    
+
     const msg = await sendGroupMsgApi(selectedGroup.id, payload);
     setGroupMessages((prev) => [...prev, msg]);
     socket.emit('group_message', { groupId: selectedGroup.id, ...msg });
@@ -459,14 +459,14 @@ export default function App() {
       <div className="app-wrapper">
         <div className={`sidebar ${showMobileChat ? 'mobile-hidden' : ''}`}>
           <div className="sidebar-tabs d-flex">
-            <button 
-              className={`flex-fill btn btn-sm ${sidebarTab === 'chats' ? 'btn-primary' : 'btn-outline-secondary'}`} 
+            <button
+              className={`flex-fill btn btn-sm ${sidebarTab === 'chats' ? 'btn-primary' : 'btn-outline-secondary'}`}
               onClick={() => setSidebarTab('chats')}
             >
               Chats
             </button>
-            <button 
-              className={`flex-fill btn btn-sm ${sidebarTab === 'groups' ? 'btn-primary' : 'btn-outline-secondary'}`} 
+            <button
+              className={`flex-fill btn btn-sm ${sidebarTab === 'groups' ? 'btn-primary' : 'btn-outline-secondary'}`}
               onClick={() => setSidebarTab('groups')}
             >
               Groups

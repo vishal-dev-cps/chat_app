@@ -11,7 +11,7 @@ import { socket, connectSocket } from '../services/socket';
 export default function ChatWindow({ messages, selectedUser, currentUserId, onSend, onBack, setMessages }) {
   const [hoveredMessage, setHoveredMessage] = useState(null);
   const [localMessages, setLocalMessages] = useState([]);
-  
+
   const handleBackup = async () => {
     try {
       const msgs = getChatFromLocal(currentUserId, selectedUser.id) || [];
@@ -60,7 +60,7 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
       const loadMessages = async () => {
         const history = await fetchChatHistory(currentUserId, selectedUser.id);
         setLocalMessages(history);
-        
+
         // Mark messages as read
         await markMessagesAsRead(currentUserId, selectedUser.id);
       };
@@ -75,7 +75,7 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
         (m.from === selectedUser.id && m.to === currentUserId) ||
         (m.to === selectedUser.id && m.from === currentUserId)
       );
-      
+
       // Merge with local messages (avoid duplicates)
       const merged = [...localMessages];
       filtered.forEach(msg => {
@@ -83,10 +83,10 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
           merged.push(msg);
         }
       });
-      
+
       merged.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
       setLocalMessages(merged);
-      
+
       // Save to localStorage
       saveChatToLocal(currentUserId, selectedUser.id, merged);
     }
@@ -164,60 +164,60 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
       console.log('[ChatWindow] Received message-deleted event:', data);
       console.log('[ChatWindow] Current user:', currentUserId);
       console.log('[ChatWindow] Selected user:', selectedUser?.id);
-      
+
       // Check if this message deletion affects the current conversation
-      const isRelevant = 
+      const isRelevant =
         (data.userId1 === currentUserId || data.userId2 === currentUserId) &&
         (data.userId1 === selectedUser?.id || data.userId2 === selectedUser?.id);
-      
+
       console.log('[ChatWindow] Is relevant:', isRelevant);
-        
+
       if (isRelevant) {
         console.log('[ChatWindow] Updating message as deleted:', data.messageId);
-        
+
         // Update local messages state
         setLocalMessages(prev => {
           const updated = prev.map(msg =>
             msg.id === data.messageId
-              ? { 
-                  ...msg, 
-                  isDeleted: true, 
-                  text: '', 
-                  attachments: [],
-                  deletedAt: Date.now() 
-                }
+              ? {
+                ...msg,
+                isDeleted: true,
+                text: '',
+                attachments: [],
+                deletedAt: Date.now()
+              }
               : msg
           );
           console.log('[ChatWindow] Local messages updated:', updated);
           return updated;
         });
-        
+
         // Also update parent messages state if available
         if (setMessages) {
           setMessages(prev => prev.map(msg =>
             msg.id === data.messageId
-              ? { 
-                  ...msg, 
-                  isDeleted: true, 
-                  text: '', 
-                  attachments: [],
-                  deletedAt: Date.now() 
-                }
+              ? {
+                ...msg,
+                isDeleted: true,
+                text: '',
+                attachments: [],
+                deletedAt: Date.now()
+              }
               : msg
           ));
         }
-        
+
         // Update localStorage
         const currentMessages = getChatFromLocal(currentUserId, selectedUser.id);
         const updatedMessages = currentMessages.map(msg =>
           msg.id === data.messageId
-            ? { 
-                ...msg, 
-                isDeleted: true, 
-                text: '', 
-                attachments: [],
-                deletedAt: Date.now() 
-              }
+            ? {
+              ...msg,
+              isDeleted: true,
+              text: '',
+              attachments: [],
+              deletedAt: Date.now()
+            }
             : msg
         );
         saveChatToLocal(currentUserId, selectedUser.id, updatedMessages);
@@ -248,35 +248,35 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
   const handleDeleteMessage = async (message) => {
     if (window.confirm('Delete this message for everyone?')) {
       try {
-        const deletedMsg = { 
-          ...message, 
-          isDeleted: true, 
-          text: '', 
+        const deletedMsg = {
+          ...message,
+          isDeleted: true,
+          text: '',
           attachments: [],
           deletedAt: Date.now()
         };
-        
+
         // Update local state immediately for instant feedback
         setLocalMessages(prev => prev.map(msg =>
           msg.id === message.id ? deletedMsg : msg
         ));
-        
+
         // Update parent messages state
         if (setMessages) {
           setMessages(prev => prev.map(msg =>
             msg.id === message.id ? deletedMsg : msg
           ));
         }
-        
+
         // Update localStorage immediately
         const updatedMessages = getChatFromLocal(currentUserId, selectedUser.id).map(msg =>
           msg.id === message.id ? deletedMsg : msg
         );
         saveChatToLocal(currentUserId, selectedUser.id, updatedMessages);
-        
+
         // Perform soft delete in service
         const success = await softDeleteMessage(currentUserId, selectedUser.id, message.id);
-        
+
         if (success) {
           // Emit socket event for real-time update to other user
           const deleteEvent = {
@@ -284,13 +284,13 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
             userId1: currentUserId,
             userId2: selectedUser.id
           };
-          
+
           console.log('[DELETE] Emitting delete-message event:', deleteEvent);
           console.log('[DELETE] Socket connected:', socket.connected);
           console.log('[DELETE] Socket ID:', socket.id);
-          
+
           socket.emit('delete-message', deleteEvent);
-          
+
           console.log('[DELETE] Message deleted successfully:', message.id);
         } else {
           console.error('[DELETE] Soft delete failed, but UI already updated');
@@ -398,7 +398,7 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
                 localMessages.map((m, i) => {
                   const isSent = m.from === currentUserId;
                   const isDeleted = m.isDeleted;
-                  
+
                   return (
                     <div
                       key={m.id || i}
@@ -423,7 +423,7 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
                             )}
                           </div>
                         )}
-                        
+
                         <div className={`msg-bubble ${isSent ? 'sent' : 'received'} ${isDeleted ? 'deleted' : ''}`}>
                           {isDeleted ? (
                             <div className="deleted-message">
@@ -450,17 +450,17 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
                               )}
                             </>
                           )}
-                          
+
                           <span className="message-time">
                             {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             {isSent && !isDeleted && (
-                              <span className="message-status">
+                              <span className="message-status-inline">
                                 {m.status === 'read' ? (
-                                  <i className="fas fa-check-double text-primary"></i>
+                                  <i className="fas fa-check-double read-check"></i>
                                 ) : m.status === 'delivered' ? (
-                                  <i className="fas fa-check-double"></i>
+                                  <i className="fas fa-check-double delivered-check"></i>
                                 ) : (
-                                  <i className="fas fa-check"></i>
+                                  <i className="fas fa-check sent-check"></i>
                                 )}
                               </span>
                             )}
