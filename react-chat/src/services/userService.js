@@ -1,62 +1,8 @@
 import apiClient from './api';
 import { filterRegularUsers } from './userFilters';
 
-/**
- * Fetch site personnel for the current security user.
- * Mirrors legacy chat.js logic but kept pure (no globals).
- */
-async function fetchSitePersonnel(currentUser) {
-  try {
-    const personnelResponse = await apiClient.get('/api/security/personnel/internal');
-    if (!personnelResponse.data.success) return [];
-
-    const personnel = personnelResponse.data.personnel || [];
-    const matchingPersonnel = personnel.find(
-      (p) => p.id === currentUser?.userId || p.id === currentUser?.id
-    );
-    if (!matchingPersonnel || !matchingPersonnel.assignedSites?.length) return [];
-
-    const sitePersonnel = [];
-    for (const site of matchingPersonnel.assignedSites) {
-      try {
-        const siteResp = await apiClient.get(`/api/security/sites/${site.siteId}/personnel`);
-        if (siteResp.data.success) {
-          (siteResp.data.personnel || []).forEach((person) => {
-            if (!sitePersonnel.find((p) => p.id === person.id)) {
-              sitePersonnel.push({
-                ...person,
-                siteId: site.siteId,
-                role: 'security',
-                status: person.status || 'offline',
-                unreadCount: 0,
-                displayName:
-                  person.name || person.email || `Security ${person.id.substring(0, 4)}`,
-                photoURL:
-                  person.photoURL ||
-                  `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                    person.name || 'S'
-                  )}&background=random`,
-              });
-            }
-          });
-        }
-      } catch {
-        /* continue */
-      }
-    }
-    return sitePersonnel;
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Load users combining chat users, security users and role-based filtering.
- * Returns an array of user objects ready for UI.
- */
 export async function loadUsers(currentUser) {
   const roleLower = (currentUser?.role || '').toLowerCase();
-  console.log('[userService] loadUsers for role:', roleLower);
 
   // ---- 1. LOAD CHAT USERS ----
   const chatUsersResp = await apiClient.get('/api/chat/users');
@@ -82,7 +28,7 @@ export async function loadUsers(currentUser) {
       role: 'security',
       displayName: p.name || p.email || `Security ${p.id.slice(0, 4)}`,
       photoURL:
-        p.photoURL ||
+        p.personnelPhoto ||
         `https://ui-avatars.com/api/?name=${encodeURIComponent(
           p.name || 'S'
         )}&background=random`,

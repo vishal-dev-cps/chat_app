@@ -1,38 +1,14 @@
-import { useEffect, useRef, useMemo, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { fetchUserStatus, markMessagesAsRead } from '../services/chatService';
 import './ChatWindow.css';
-import MessageStatus from './MessageStatus';
 import MessageInput from './MessageInput';
-import { getChatFromLocal, deleteChatHistory, saveChatToLocal, fetchChatHistory, updateMessageInHistory, softDeleteMessage } from '../services/chatService';
-import { backupMessages } from '../services/backupService';
-import { format } from 'date-fns';
+import { getChatFromLocal, deleteChatHistory, saveChatToLocal, fetchChatHistory, softDeleteMessage } from '../services/chatService';
+
 import { socket, connectSocket } from '../services/socket';
 
 export default function ChatWindow({ messages, selectedUser, currentUserId, onSend, onBack, setMessages }) {
   const [hoveredMessage, setHoveredMessage] = useState(null);
   const [localMessages, setLocalMessages] = useState([]);
-
-  const handleBackup = async () => {
-    try {
-      const msgs = getChatFromLocal(currentUserId, selectedUser.id) || [];
-      const apiMsgs = msgs.map(m => ({
-        senderId: m.from,
-        recipientId: m.to,
-        message: m.text,
-        tempId: m.id,
-        ...(m.attachments && { attachments: m.attachments })
-      }));
-      if (apiMsgs.length === 0) {
-        alert('No messages to backup');
-        return;
-      }
-      await backupMessages(apiMsgs);
-      alert('Backup successful');
-    } catch (e) {
-      console.error(e);
-      alert('Backup failed');
-    }
-  };
 
   const messagesEndRef = useRef(null);
 

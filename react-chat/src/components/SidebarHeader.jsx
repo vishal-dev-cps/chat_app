@@ -6,8 +6,8 @@ import api from '../services/api';
 export default function SidebarHeader({ users = [], onSearch, currentUser, currentUserId, onGroupCreated }) {
   const [query, setQuery] = useState('');
   const [userDetails, setUserDetails] = useState(null);
-  const [sitePersonnel, setSitePersonnel] = useState([]);
-  const [siteAdmin, setSiteAdmin] = useState(null);
+  const [setSitePersonnel] = useState([]);
+  const [setSiteAdmin] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   
   // Get securityId from URL
@@ -93,7 +93,6 @@ export default function SidebarHeader({ users = [], onSearch, currentUser, curre
             try {
               localStorage.setItem('current_user_name', name);
             } catch {/* ignore quota */}
-            const initials = name.split(' ').slice(0,2).map(s=>s[0].toUpperCase()).join('');
             const avatar = userDetails?.photoURL || currentUser?.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
             return (
               <img

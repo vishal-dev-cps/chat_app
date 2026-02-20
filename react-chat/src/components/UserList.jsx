@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getLastMessage, getUnreadCount, getChatFromLocal } from '../services/chatService';
+import {  useEffect, useMemo, useState } from 'react';
+import {  getChatFromLocal } from '../services/chatService';
 import './UserList.css';
 
 // Group users by their role
@@ -120,31 +120,6 @@ export default function UserList({ users, selected, onSelect, messages }) {
       })
     }));
   }, [usersWithMetadata]);
-
-  const formatLastMessageTime = (timestamp) => {
-    if (!timestamp) return '';
-
-    const now = new Date();
-    const msgDate = new Date(timestamp);
-    const diffMs = now - msgDate;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m`;
-    if (diffHours < 24) return `${diffHours}h`;
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays}d`;
-
-    return msgDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
-
-  const truncateText = (text, maxLength = 30) => {
-    if (!text) return '';
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + '...';
-  };
 
   return (
     <div className="user-list">

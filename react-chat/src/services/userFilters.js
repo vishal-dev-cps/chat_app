@@ -152,7 +152,7 @@ export async function filterRegularUsers(users, currentUser) {
           role: 'admin',
           displayName: admin.name,
           __fromByUser: true,
-          photoURL: `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          photoURL: admin.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(
             admin.name || 'A'
           )}&background=random`,
         }
@@ -168,7 +168,7 @@ export async function filterRegularUsers(users, currentUser) {
       siteIds: p.siteIds,
       status: p.status || 'offline',
       displayName: p.name,
-      photoURL: `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      photoURL: p.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(
         p.name || 'U'
       )}&background=random`,
     }));
