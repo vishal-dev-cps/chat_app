@@ -20,6 +20,8 @@ import ChatWindow from './components/ChatWindow';
 import GroupChatWindow from './components/GroupChatWindow';
 import LoginModal from './components/LoginModal';
 import './App.css';
+import { restoreChatsIfEmpty } from './services/backupService';
+
 
 export default function App() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -31,6 +33,7 @@ export default function App() {
   useEffect(() => {
     if (currentUserId) {
       localStorage.setItem('current_user_id', currentUserId);
+      restoreChatsIfEmpty(currentUserId);
     }
   }, [currentUserId]);
 

@@ -1,4 +1,5 @@
 import { StrictMode } from 'react';
+import './utils/globalPopupOverride';
 
 // Register service worker for notifications (must be before first render)
 if ('serviceWorker' in navigator) {
