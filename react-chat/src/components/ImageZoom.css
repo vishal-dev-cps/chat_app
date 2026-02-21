@@ -1,0 +1,235 @@
+/* ImageZoom Component Styles */
+.image-zoom-wrapper {
+  position: relative;
+}
+
+/* Override library defaults - force transparent background */
+[data-rmiz-modal-overlay] {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+dialog[data-rmiz] {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Hide default backdrop */
+.image-zoom-dialog::backdrop {
+  display: none !important;
+  background: transparent !important;
+}
+
+/* Dialog when open */
+.image-zoom-dialog[open] {
+  position: fixed;
+  margin: 0;
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
+  max-width: none;
+  overflow: hidden;
+  border: 0;
+  background: transparent !important;
+  background-color: transparent !important;
+  padding: 0;
+}
+
+/* Ghost element (placeholder) */
+.image-zoom-wrapper [data-rmiz-ghost] {
+  pointer-events: none;
+  position: absolute;
+}
+
+/* Zoom button */
+.image-zoom-wrapper [data-rmiz-btn-zoom] {
+  margin: 0;
+  width: 40px;
+  height: 40px;
+  touch-action: manipulation;
+  appearance: none;
+  border-radius: 50%;
+  border: none;
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: 8px;
+  color: #ffffff;
+  outline-offset: 2px;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  bottom: auto;
+  left: auto;
+  cursor: zoom-in;
+}
+
+/* Unzoom button */
+.image-zoom-wrapper [data-rmiz-btn-unzoom] {
+  margin: 0;
+  width: 40px;
+  height: 40px;
+  touch-action: manipulation;
+  appearance: none;
+  border-radius: 50%;
+  border: none;
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: 8px;
+  color: #ffffff;
+  outline-offset: 2px;
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  bottom: auto;
+  left: auto;
+  z-index: 1;
+  cursor: zoom-out;
+}
+
+/* Hide zoom button when not focused/active (accessibility) */
+.image-zoom-wrapper [data-rmiz-btn-zoom]:not(:focus):not(:active) {
+  pointer-events: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+  clip: rect(0 0 0 0);
+}
+
+/* Modal overlay */
+[data-rmiz-modal-overlay] {
+  position: absolute !important;
+  inset: 0 !important;
+  transition: all 0.3s ease !important;
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+[data-rmiz-modal-overlay="hidden"] {
+  background: transparent !important;
+  background-color: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[data-rmiz-modal-overlay="visible"] {
+  background: transparent !important;
+  background-color: transparent !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+}
+
+.image-zoom-wrapper [data-rmiz-modal-overlay] {
+  position: absolute;
+  inset: 0;
+  transition: all 0.3s ease;
+  background: transparent !important;
+}
+
+.image-zoom-wrapper [data-rmiz-modal-overlay="hidden"] {
+  background: transparent !important;
+}
+
+.image-zoom-wrapper [data-rmiz-modal-overlay="visible"] {
+  background-color: transparent !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Modal content */
+.image-zoom-wrapper [data-rmiz-modal-content] {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 5vh 5vw !important;
+}
+
+[data-rmiz-modal-content] {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 5vh 5vw !important;
+}
+
+/* Modal image */
+.image-zoom-wrapper [data-rmiz-modal-img] {
+  position: relative !important;
+  transform-origin: center center !important;
+  cursor: zoom-out;
+  transition: transform 0.3s ease;
+  max-height: 95vh !important;
+  max-width: 95vw !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+}
+
+[data-rmiz-modal-img] {
+  max-height: 95vh !important;
+  max-width: 95vw !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+}
+
+/* Cursor styles for zoomable content */
+.image-zoom-wrapper [data-rmiz-content="found"] img {
+  cursor: zoom-in;
+}
+
+.image-zoom-wrapper [data-rmiz-content="found"] svg {
+  cursor: zoom-in;
+}
+
+.image-zoom-wrapper [data-rmiz-content="found"] [role="img"] {
+  cursor: zoom-in;
+}
+
+.image-zoom-wrapper [data-rmiz-content="found"] [data-zoom] {
+  cursor: zoom-in;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .image-zoom-wrapper [data-rmiz-modal-img] {
+    transition: none;
+  }
+
+  .image-zoom-wrapper [data-rmiz-modal-overlay] {
+    transition: none;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .image-zoom-wrapper [data-rmiz-btn-zoom],
+  .image-zoom-wrapper [data-rmiz-btn-unzoom] {
+    background-color: rgba(255, 255, 255, 0.7);
+    color: #000000;
+  }
+
+  .image-zoom-wrapper [data-rmiz-modal-overlay="visible"] {
+    background-color: transparent !important;
+  }
+
+  .image-zoom-dialog[open] {
+    background: transparent !important;
+  }
+}
+
+/* Global overrides to ensure transparency */
+dialog[data-rmiz][open]::backdrop {
+  background: transparent !important;
+}
+
+dialog[data-rmiz][open] {
+  background: transparent !important;
+  background-color: transparent !important;
+}

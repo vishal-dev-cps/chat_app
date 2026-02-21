@@ -3,6 +3,8 @@ import { fetchUserStatus, markMessagesAsRead } from '../services/chatService';
 import './ChatWindow.css';
 import MessageInput from './MessageInput';
 import { getChatFromLocal, deleteChatHistory, saveChatToLocal, fetchChatHistory, softDeleteMessage } from '../services/chatService';
+import { ImageZoom } from './ImageZoom';
+import 'react-medium-image-zoom/dist/styles.css';
 
 import { socket, connectSocket } from '../services/socket';
 
@@ -310,16 +312,18 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
             <i className="fas fa-arrow-left"></i>
           </button>
         )}
-        <img
-          src={selectedUser.photoURL}
-          alt={selectedUser.displayName}
-          className="header-avatar"
-          onError={(e) => {
-            const initials = (selectedUser.displayName || 'U').split(' ').slice(0, 2).map(s => s[0].toUpperCase()).join('');
-            e.target.onerror = null;
-            e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=random`;
-          }}
-        />
+        <ImageZoom>
+          <img
+            src={selectedUser.photoURL}
+            alt={selectedUser.displayName}
+            className="header-avatar"
+            onError={(e) => {
+              const initials = (selectedUser.displayName || 'U').split(' ').slice(0, 2).map(s => s[0].toUpperCase()).join('');
+              e.target.onerror = null;
+              e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=random`;
+            }}
+          />
+        </ImageZoom>
         <div className="header-info">
           <span className="name">{selectedUser.displayName}</span>
           <span className={`status ${statusClass}`}>
@@ -412,7 +416,9 @@ export default function ChatWindow({ messages, selectedUser, currentUserId, onSe
                                 <div className="msg-attachments">
                                   {m.attachments.map((att, idx) => (
                                     att.type?.startsWith('image/') ? (
-                                      <img key={idx} src={att.url} alt={att.name} className="chat-img" />
+                                      <ImageZoom key={idx}>
+                                        <img src={att.url} alt={att.name} className="chat-img" />
+                                      </ImageZoom>
                                     ) : (
                                       <a key={idx} href={att.url} target="_blank" rel="noreferrer" className="file-link">
                                         <i className="fas fa-file"></i> {att.name}

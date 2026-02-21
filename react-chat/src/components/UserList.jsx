@@ -1,6 +1,8 @@
 import {  useEffect, useMemo, useState } from 'react';
 import {  getChatFromLocal } from '../services/chatService';
 import './UserList.css';
+import { ImageZoom } from './ImageZoom';
+import 'react-medium-image-zoom/dist/styles.css';
 
 // Group users by their role
 const groupUsersByRole = (users) => {
@@ -146,11 +148,13 @@ export default function UserList({ users, selected, onSelect, messages }) {
                 className={`user-item ${isSelected ? 'active' : ''}`}
               >
                 <div className="user-avatar-wrapper">
-                  <img
-                    src={user.photoURL}
-                    alt={user.displayName}
-                    className="user-avatar"
-                  />
+                  <ImageZoom>
+                    <img
+                      src={user.photoURL}
+                      alt={user.displayName}
+                      className="user-avatar"
+                    />
+                  </ImageZoom>
                   {user.status === 'online' && (
                     <span className="online-indicator"></span>
                   )}

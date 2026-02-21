@@ -3,7 +3,9 @@ import PropTypes from 'prop-types';
 import MessageInput from './MessageInput';
 import './ChatWindow.css';
 import { socket, connectSocket } from '../services/socket';
-import MemberListModal from './MemberListModal'; 
+import MemberListModal from './MemberListModal';
+import { ImageZoom } from './ImageZoom';
+import 'react-medium-image-zoom/dist/styles.css'; 
 
 //const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const API_BASE = import.meta.env.VITE_API_URL || 'https://us-central1-securityerp.cloudfunctions.net';
@@ -361,7 +363,7 @@ export default function GroupChatWindow({ currentUserId, group, messages = [], o
                         return (
                           <div key={fileIdx} className="file-attachment" style={{ marginTop: '8px', maxWidth: '300px' }}>
                             {isImage ? (
-                              <a href={file.url} target="_blank" rel="noopener noreferrer">
+                              <ImageZoom>
                                 <img
                                   src={file.url}
                                   alt={file.name || 'Image'}
@@ -369,10 +371,11 @@ export default function GroupChatWindow({ currentUserId, group, messages = [], o
                                     maxWidth: '100%',
                                     maxHeight: '200px',
                                     borderRadius: '8px',
-                                    border: '1px solid #e0e0e0'
+                                    border: '1px solid #e0e0e0',
+                                    cursor: 'pointer'
                                   }}
                                 />
-                              </a>
+                              </ImageZoom>
                             ) : (
                               <a
                                 href={file.url}
